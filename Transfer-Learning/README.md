@@ -51,7 +51,7 @@ In this tutorial you will see a complete guide of how to apply deep learning on 
 
 - **VGG16 Architecture**
 
-  The VGG16 is one of the models that got the top accuracy in the IMAGENET challenge in 2014, achiving 92.7% top-5 test accuracy. This challenge consists of classifying more than 100,000 images in 1,000 differents classes. For it, there are more than 1,2 million images for training and 50,000 for validation.
+  The VGG16 is one of the models that got the top accuracy in the IMAGENET challenge in 2014, achiving 92.7% in the top-5 test accuracy. This challenge consists of classifying more than 100,000 images in 1,000 differents classes. For it, there are more than 1,2 million images for training and 50,000 for validation.
  
   The vgg16 is one of the most used model for applying transfer learning in image recognition problems. Furthermore, it has a traditional deep architecture, which is just based on convolutional and pooling layers. The Figure 1 shows a representation of it. Notice that it is composed by 16 principal layers, where 13 are convolutional, 1 is flatten, 1 is fully connected and the last one is a softmax classifier. There are 5 more layers corresponding to the max pooling operation, but these layers was not taken in account for giving the model name.
 
@@ -68,7 +68,7 @@ In this tutorial you will see a complete guide of how to apply deep learning on 
 
 - **The CIFAR10 dataset**
 
-   The [CIFAR10](https://www.cs.toronto.edu/~kriz/cifar.html) is a dataset with 60,000 tiny images (50,000 for training and 10,000 for test). Each image has a shape of 37x37x3. All the images are distributed equaly between $10$ classes (airplane, automobile, bird, cat, deer, dog, frog, horse, ship and truck), as shown by the Figure 2.
+   The [CIFAR10](https://www.cs.toronto.edu/~kriz/cifar.html) is a dataset with 60,000 tiny images (50,000 for training and 10,000 for test). Each image has a shape of 37x37x3. All the images are distributed equaly between 10 classes (airplane, automobile, bird, cat, deer, dog, frog, horse, ship and truck), as shown by the Figure 2.
 
   ![CIFAR10](https://github.com/clebeson/Deep_Learning/blob/master/Transfer-Learning/images/cifar10.png)
   
