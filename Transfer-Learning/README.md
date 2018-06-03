@@ -67,7 +67,8 @@ In this tutorial you will see a complete guide of how to apply deep learning on 
 
 
 - **The CIFAR10 dataset**
-  The [CIFAR10](https://www.cs.toronto.edu/~kriz/cifar.html) is a dataset with 60,000 tiny images (50,000 for training and 10,000 for test). Each image has a shape of 37x37x3. All the images are distributed equaly between $10$ classes (airplane, automobile, bird, cat, deer, dog, frog, horse, ship and truck), as shown by the Figure 2.
+
+   The [CIFAR10](https://www.cs.toronto.edu/~kriz/cifar.html) is a dataset with 60,000 tiny images (50,000 for training and 10,000 for test). Each image has a shape of 37x37x3. All the images are distributed equaly between $10$ classes (airplane, automobile, bird, cat, deer, dog, frog, horse, ship and truck), as shown by the Figure 2.
 
   ![CIFAR10](https://github.com/clebeson/Deep_Learning/blob/master/Transfer-Learning/images/cifar10.png)
   
