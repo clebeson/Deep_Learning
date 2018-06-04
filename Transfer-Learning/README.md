@@ -37,9 +37,9 @@ In this tutorial you will see a complete guide of how to apply deep learning on 
   This is a good question. Many people who uses this technique do not know how to answer to this question. Because they just follow some tutorials and do not learn more about the theory behind it.
   As mentioned by <a href="http://cs231n.github.io/transfer-learning/"> Fei-Fei Li </a>, the transfer learning can occur in 4 different contexts, but here we summarize them in only 2 points, such as:
  
-  1. When the new task is similar to the trained model and de dataset is enough big, the transfer learning must be made. In this case, only the fully connected layer need to be trained/retrained. The CNN is taken only as a feature extractor, and should not be trained as well.
+  1. When the new task is similar to the trained model and the dataset is big enough, the transfer learning must be made. In this case, only the fully connected layer need to be trained/retrained. The CNN is taken only as a feature extractor, and should not be trained.
   
-  2. When the task is different of the original or the dataset is small, it is necessary to do a fine tuning. This technique consists of doing adjusts in the CNN weights while the fully connected layers are training.
+  2. When the task is different of the original one or the dataset is small, it is necessary to do a fine tuning. This technique consists of doing adjusts in the CNN weights while the fully connected layers are training.
 
   Do not worry if you do not know how to use these techniques yet, this tutorial will cover both transfer learning and fine tuning. But, if you want to see a complete guide about this and others related topics, please, see this  course from Stanford University, titled: <a href="http://cs231n.github.io/">Convolutional Neural Networks for Visual Recognition. </a>
 
