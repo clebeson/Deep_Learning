@@ -133,7 +133,7 @@ class Hyperparameters:
       self.bottleneck = True
 ``` 
 
-### Class that  provides same utilities for the model, such as downloads files,  gets dataset, does  data augmentation,  generates bottlenecks files and creates a confusion matrix from the model.
+### Class that  provides some utilities for the model, such as downloads files,  gets dataset, does  data augmentation,  generates bottlenecks files and creates a confusion matrix from the model.
 ``` python
 class utils:
       def get_or_generate_bottleneck( sess, model, file_name, dataset, labels, batch_size = 128):
