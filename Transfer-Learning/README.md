@@ -1,7 +1,7 @@
 ## Transfer Learning (Tensorflow +  vgg16 + CIFAR10 )
 
 
-In this tutorial you will see a complete guide of how to apply deep learning on image recognition by studying an example of how to transfer learning from the VGG16 model (trained with IMAGENET dataset) to solve the CIFAR10 problem. After follow the next steps, it will be easy to adapt the code in order to apply the vgg16 model for recognizing others image classification problems.
+In this tutorial you will see a complete guide of how to apply deep learning on image recognition by studying an example of how to transfer learning from the VGG16 model (trained with IMAGENET dataset) to solve the CIFAR10 problem. After following the next steps, it will be easy to adapt the code in order to apply the vgg16 model for recognizing others image classification problems.
 
 
 ### Requirements:
@@ -20,14 +20,14 @@ In this tutorial you will see a complete guide of how to apply deep learning on 
 ## A little of theory
 - **What is Transfer Learning?**
 
-  One of the most important characteristics of the deep learning is the training time. Many models could take hours, days, or even weeks to get trained. Thus, in order to accelerate this process, powerful machines are often used. But not all researchers have a machine with this power of processing. What lead small groups to not be able to use this models for solving their problems. However, great companies or research groups, such as Google and Facebook, have been training the models and releasing them for the community.
+  One of the most important characteristics of the deep learning is the training time. Many models could take hours, days, or even weeks to get trained. Thus, in order to accelerate this process, powerful machines are often used. But not all researchers have a machine with this power of processing. What lead small groups to be unable to use these models for solving their problems. However, great companies or research groups, such as Google and Facebook, have been training the models and releasing them to the community.
   
-  Many works in deep learning field say that the inicialize of the weights is one of the most important tasks when one wishes to train a deep model. Therefore, the reuse the weights of models with similar tasks is a common practice. That reuse of weight is called transfer learning, because the knowledge acquired during the training is now transferred to other problem. Lets give you an example of transfer learning: imagine 2 persons who want to learn to play piano. The first one never plays any instrument, than his/her knowledge needs to start from scratch, what can be hard, considering that the piano is a difficult instrument to play. On the other hands, the other one already plays guitar, so his/her knowledge about music, rhythm and chords can be reused to get easier the process of learning to play piano. Who of those persons will learning faster? Of course the second one, because the possibility of  transferring his/her knowledge about to play guitar.
+  Many works in deep learning field say that the inicialization of the weights is one of the most important tasks when one wishes to train a deep model. Therefore, to reuse the model weights for similar tasks is a common practice. That reuse of weights is called transfer learning, because the knowledge acquired during the training is now transferred to other problem. Lets give you an example of transfer learning: imagine 2 persons who want to learn to play piano. The first one never plays any instrument, than his/her knowledge needs to start from scratch, what can be hard, considering that the piano is a difficult instrument to play. On the other hands, the other one already plays guitar, so his/her knowledge about music, rhythm and chords can be reused to get easier the process of learning to play piano. Who of those persons will learning faster? Of course the second one, because the possibility of  transferring his/her knowledge about to play guitar.
 
-  Thus, in order to accelerate the time of training, its common to use trained model to solve different tasks.
-  In the majority of cases, transfer learning is able to reach good results, so is important to now how it works and the better way to use it.
+  Thus, in order to accelerate the training, its common to use trained model to solve different tasks.
+  In the majority of cases, transfer learning is able to achieve good results, so is important to now how it works and the better way to use it.
 
-  It is important to mention that the transfer learning do not just reuse the weights, it is possible reuse all the model, what can became easier the process of applying deep models to solve problems.
+  It is important to mention that the transfer learning does not just reuse the weights, it is possible reuse the entire model, what can make the process of applying deep models to solve problems easier.
 
 
 
@@ -361,7 +361,7 @@ class utils:
 
 ### The function "get_vgg16" returns a pretrained vgg16 model.
 
- All the work of load and restore the weights of the model is responsibility of tensorflow. We just need to choose which layer we want to cut and pass it as parameter for the function "get_vgg16". In transfer learning it is common to dispose the fully connected layer and reuse only the convolutional ones. It occurs because the new problem/dataset use to be different from the original (such one that was used for training the model), and the numbers of classes is often different as well.<br>
+ All the work of loading and restoring the weights of the model is responsibility of tensorflow. We just need to choose which layer we want to cut and pass it as parameter for the function "get_vgg16". In transfer learning it is common to dispose the fully connected layer and reuse only the convolutional ones. It occurs because the new problem/dataset use to be different from the original (such one that was used for training the model), and the numbers of classes is often different as well.<br>
 
  In a CNN, the first layers are responsible for selecting borders, the middle layers for selecting some kinds of patterns, based on combinations of those edges obtained previously and de last ones for composing patterns with a high level of representation, also known as semantic layers. Thereby, when the new dataset is much different of the original, the last layers are not indicated to be used. Since these ones likely represents particular patterns that will not help the new dataset. So, it is common to use the first layers in the transfer learning or fine tuning and add new fully connected ones in order to be trained from scratch.
  
@@ -545,7 +545,7 @@ def fc_model(flatten, hidden_layers = [512], keep = None):
 ```
 
 ### Creating a session
- The function "create_monitored_session" creates a tensorflow session able to restore weights and/or save them. The parameter "checkpoint_dir" represents where the weights were saved or where one wants they be saved. All the save/restore process is made automatically by tensorflow.
+ The function "create_monitored_session" creates a tensorflow session able to restore weights and/or save them. The parameter "checkpoint_dir" represents where the weights were saved or where one wants to save them. All the save/restore process is made automatically by tensorflow.
 
  As default, tensorflow allocate all GPU memory in the first called to the session run, thus the "tf.ConfigProto()", by setting the "True" to the "gpu_options.allow_growth", allows the gradual increase of memory. In other words, it allows to allocate the GPU memory by demanding. This is  important mainly when more than one training or prediction process is running on the same GPU.
  ```python
@@ -604,7 +604,7 @@ The function "test" is responsible for applying the test dataset through the tra
   ```
   
   ### Training the model: the mainly function
-The "train" function is responsible for training the model. It starts checking the hyperparameters and resetting the default graph.  After, the dataset is loaded by using the class "util". The next step consists of  creating the model, where the tensorflow graph is created. Now, a monitored season is created too. This kind of session will save and restore the model automatically, which will be very important when an unexpected event occurs and the model stop the training (such as a power outage or when the Google Colab finishes the session during the training).
+The "train" function is responsible for training the model. It starts checking the hyperparameters and resetting the default graph.  Then, the dataset is loaded by using the class "util". The next step consists of  creating the model, where the tensorflow graph is created. Now, a monitored season is created too. This kind of session will save and restore the model automatically, which will be very important when an unexpected event occurs and the model stop the training (such as a power outage or when the Google Colab finishes the session during the training).
 
 With the model and the session created, you are able, if you want, to generate or load the bottlenecks files. This is what the next lines are doing. One of the most important results of theses lines is  obtaining the tensor "input_data_placeholder". It is important because when the bottleneck option is chosen, the "feed_dict" must feed the placeholder of the "bottleneck" rather than the one that feeds input to the VVG16. Thus, if the bottleneck is chosen, the input placeholder will be the "model[bottleneack_input]", else, it will be the input tensor of the vgg16, "model[images]".
 
@@ -705,6 +705,6 @@ Therefore, the session can call the optimizer and training the model. Lasty, it 
       params.initial_learning_rate = 1e-4
       params.cut_layer = "pool3"
 
-      train(params
+      train(params)
    ```
   
