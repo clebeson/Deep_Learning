@@ -7,7 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/1yLAkRZMH-rvOWTRmnCBReiUgTA9AwvLQ
 
 ## Transfer Learning (Tensorflow + VGG16 + CIFAR10)
-The code below performs a complete task of transfer learning. All of it was made thinking in an easy way to learn this subject and a easy way of modifying it in order to resolve other tasks.
+The code below performs a complete task of transfer learning. All of it was made thinking of an easy way to learn this subject and an easy way to modify it in order to resolve other tasks.
 
 ###All the necessary imports
 Note that this code was made for running on [Google Colab](https://colab.research.google.com/notebooks/welcome.ipynb). Then, its usage outside this plataform requires adaptations. As taking off all the Google Colab dependencies and download manually the VGG16 model and put it into the folder "./model". The model can be downloaded [here](https://github.com/ry/tensorflow-vgg16/blob/master/vgg16-20160129.tfmodel.torrent):
