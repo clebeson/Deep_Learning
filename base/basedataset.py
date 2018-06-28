@@ -54,7 +54,21 @@ class BaseDataset(object):
 
         return ( self.total_train, self.total_test, self.total_validation)
 
-    
+    def get_sample(self):
+        if len(self._train_data) == 0:
+            print("Loading data...")
+            self.load()
+        data = []
+        print self._test_labels.shape, self._test_data.shape
+        for i in range(self.hparams.num_classes):
+            for index,label in enumerate(self._test_labels):
+                if label == i:
+                    data.append(self._test_data[index])
+                    break
+        return data
+            
+                          
+        
     def get_image_size(self):
         return self._image_size
     

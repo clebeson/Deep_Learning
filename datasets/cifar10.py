@@ -20,7 +20,7 @@ class Cifar10(BaseDataset):
 
     def load(self):
         folder_name = 'cifar_10'
-        main_directory = "./datasets"
+        main_directory = "./data"
         url = "http://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
 
         utils.maybe_download_and_extract(url, main_directory, folder_name, "cifar-10-batches-py")
@@ -28,6 +28,7 @@ class Cifar10(BaseDataset):
 #         f.close()
 
         for i in range(5):
+            
             f = open(os.path.join(main_directory,folder_name,'data_batch_' + str(i + 1)), 'rb')
             datadict = pickle.load(f)
             f.close()
@@ -35,7 +36,7 @@ class Cifar10(BaseDataset):
             data = np.array(datadict["data"])
             labels = datadict['labels']
 
-#             data = np.array(data, dtype=float) / 255.0
+            data = np.array(data, dtype=float) / 255.0
             data = data.reshape([-1, 3, 32, 32])
             data = data.transpose([0, 2, 3, 1])
 
@@ -54,7 +55,7 @@ class Cifar10(BaseDataset):
         labels = np.array(datadict['labels'])
         
 
-#         self._test_data = np.array(data, dtype=float) / 255.0
+        self._test_data = np.array(data, dtype=float) / 255.0
         self._test_data = self._test_data.reshape([-1, 3, 32, 32])
         self._test_data = self._test_data.transpose([0, 2, 3, 1])
         self._test_labels = labels
@@ -76,7 +77,6 @@ class Cifar10(BaseDataset):
        
         self._validation_labels = self._train_labels[index_samples]
         self._train_labels = self._train_labels[indices]
-        
       
        
                         
