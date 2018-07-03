@@ -158,18 +158,6 @@ def fc_cosnorm(x, w, biases, bias=0.00001, name = "cosNorm"):
 
     return tf.divide(y ,(x * w), name = name)
 
-def regularize(loss, type = 1, scale = 0.005, scope = None):
-    if type == 1:
-        regularizer = tf.contrib.layers.l1_regularizer( scale=scale,
-                                                       scope=scope)
-    else:
-        regularizer = tf.contrib.layers.l2_regularizer( scale=scale, 
-                                                       scope=scope)
-
-    weights = tf.trainable_variables() # all vars of your graph
-    regularization_penalty = tf.contrib.layers.apply_regularization(regularizer, weights)
-    regularized_loss = loss + regularization_penalty
-    return regularized_loss     
 
 
     

@@ -36,7 +36,7 @@ class Cifar10(BaseDataset):
             data = np.array(datadict["data"])
             labels = datadict['labels']
 
-            data = np.array(data, dtype=float) / 255.0
+            data = np.array(data, dtype=float) 
             data = data.reshape([-1, 3, 32, 32])
             data = data.transpose([0, 2, 3, 1])
 
@@ -55,7 +55,7 @@ class Cifar10(BaseDataset):
         labels = np.array(datadict['labels'])
         
 
-        self._test_data = np.array(data, dtype=float) / 255.0
+        self._test_data = np.array(data, dtype=float) 
         self._test_data = self._test_data.reshape([-1, 3, 32, 32])
         self._test_data = self._test_data.transpose([0, 2, 3, 1])
         self._test_labels = labels

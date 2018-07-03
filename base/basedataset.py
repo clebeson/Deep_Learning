@@ -32,6 +32,7 @@ class BaseDataset(object):
         self._next_step = 0
         self._current_epoch = 0
         self._tfrecord = tfrecord
+        self._teste_sample = []
     
 
 
@@ -41,11 +42,12 @@ class BaseDataset(object):
     #     _train_labels and _validation_labels 
     #     with a numpy.array data type.
     @abstractmethod
-    def load(self):  pass
+    def load(self, name  = "train"):  pass
     
     def istfrecord(self):
         return self._tfrecord
-    
+    def set_tfrecord(self, tfrercord):
+        self._tfrecord = tfrercord
     
     def get_name(self):
         return self._name
@@ -53,19 +55,28 @@ class BaseDataset(object):
     def get_size(self):
 
         return ( self.total_train, self.total_test, self.total_validation)
-
+    
+    def _set_data(self, data, labels, name="train"):
+        if name == "test":
+            self._test_data, self._test_labels = data, labels
+        elif name == "validation":
+            self._validation_data, self._validation_labels = data, labels
+        else:
+            self._train_data, self._train_labels = data, labels
+        
+        
     def get_sample(self):
         if len(self._train_data) == 0:
-            print("Loading data...")
-            self.load()
-        data = []
-        print self._test_labels.shape, self._test_data.shape
+            print("Loading test data...")
+            self.load("test")
+        if self._teste_sample:
+            return self._teste_sample 
         for i in range(self.hparams.num_classes):
             for index,label in enumerate(self._test_labels):
                 if label == i:
-                    data.append(self._test_data[index])
+                    self._teste_sample.append(self._test_data[index])
                     break
-        return data
+        return self._teste_sample
             
                           
         
@@ -77,20 +88,20 @@ class BaseDataset(object):
         
     def get_train(self, hot = True):
         if len(self._train_data) == 0:
-            print("Loading data...")
-            self.load()
+            print("Loading train data...")
+            self.load("train")
         return self._train_data, self._dense_to_one_hot(self._train_labels) if hot else self._train_labels
     
     def get_test(self, hot = True): 
         if len(self._train_data) == 0:
-            print("Loading data...")
-            self.load()
+            print("Loading test data...")
+            self.load("test")
         return self._test_data, self._dense_to_one_hot(self._test_labels) if hot else self._test_labels
     
     def get_validation(self, hot = True): 
         if len(self._train_data) == 0:
-            print("Loading data...")
-            self.load()
+            print("Loading validation data...")
+            self.load("validation")
         return self._validation_data, self._dense_to_one_hot(self._validation_labels) if hot else  self._validation_labels
     
     def get_tfrecord_data(self, run_type = "train"):
@@ -98,13 +109,10 @@ class BaseDataset(object):
         shuffled = False if type=="test" or "validation" else True
         return self._load_inputs(filename, shuffled )
         
-        
-        
-    
     def next_batch(self): 
         if len(self._train_data) < 1 or len(self._train_labels) < 1:
-            print("Loading data...")
-            self.load()
+            print("Loading train data...")
+            self.load("train")
         
         if self._indices == []:
             self._indices = list(range(len(self._train_data)))
@@ -130,7 +138,7 @@ class BaseDataset(object):
     def get_or_generate_bottleneck( self, sess, model, file_name, type = "train", batch_size = 128):
         
         if len(self._train_data) < 1 or len(self._train_labels) < 1:
-            self.load()
+            self.load(type)
         if type == "test":
             dataset = self._test_data
             labels = self._test_labels
@@ -218,8 +226,8 @@ class BaseDataset(object):
     def _generate_tfrecord_file(self, run_type = "train"):
         file_name = "./data/tfrecords/{}_{}.tfrecords".format( type(self).__name__ , run_type)
         if os.path.exists(file_name):
-            print( "FIle {}_{}.tfrecords alread exists.".format(type(self).__name__,run_type) )
-#             return file_name
+            print( "File {}_{}.tfrecords alread exists.".format(type(self).__name__,run_type) )
+            return file_name
         
         def byte_feature(value):
             return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))
@@ -255,7 +263,7 @@ class BaseDataset(object):
                 
                 indices = list(range(len(data_set)))
                 shuffle(indices)
-                for index in indices[:1000]:
+                for index in indices:
                     data = data_set[index].astype(np.uint8)
                     label = labels[index]
 
@@ -279,6 +287,7 @@ class BaseDataset(object):
                 coord.join(threads)
             print('Elapsed time:',time.time() - t)
             
+            
         return file_name
     
     def _tf_data_aug(self, data):
@@ -289,7 +298,7 @@ class BaseDataset(object):
 
         return data
         
-    def _read_decode_distort(self,queue,  is_train = True, ):
+    def _read_decode_distort(self,queue,  is_train = True):
         reader = tf.TFRecordReader()
         _, serialized = reader.read(queue)
         features = tf.parse_single_example(serialized, features={

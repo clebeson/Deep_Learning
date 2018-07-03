@@ -1,8 +1,9 @@
 from base.baselayer import BaseLayer
+from roi_pooling.roi_pooling_ops import roi_pooling
 
 
 
-class MaxPool(BaseLayer):
+class ROIPool(BaseLayer):
     def __init__(self, input, kernel_size = 2, stride = 2, depth = 1, name="pool"):
         self._kernel = kernel_size
         self._stride = stride

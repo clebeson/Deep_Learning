@@ -17,9 +17,9 @@ import layers
 
 
 class Vgg16(BaseModel):
-    def __init__(self,hparams, dataset):
+    def __init__(self, dataset, cut_layer = None):
 
-        BaseModel.__init__(self, hparams, 
+        BaseModel.__init__(self,
                        info = {
                                     "input_images": "images", 
                                     "last_layer" : "fc8/BiasAdd",
@@ -27,7 +27,7 @@ class Vgg16(BaseModel):
                                     "url" : "http://download.tensorflow.org/models/vgg_16_2016_08_28.tar.gz",
                                     "model_name" : "vgg_16"   
                                     },
-                       dataset = dataset
+                       dataset = dataset, cut_layer = cut_layer
                       )
         
 
@@ -61,30 +61,30 @@ class Vgg16(BaseModel):
 #         return logits
 
 
-    def _get_cnn(self, inputs, batch_norm = None, pretrained_weights = None): 
-        self.add_repeated(2, layers.Conv2d, 64, [3, 3], name = "conv1",  norm = batch_norm)
+    def _create_cnn(self, inputs, batch_norm = None, pretrained_weights = None): 
+        self.add_repeated(2, layers.Conv2d, 64, [3, 3], name = "conv1",  norm = False, istraining = self._istraining)
         self.add(layers.MaxPool,name = "pool1")
         if self.hparams.cut_layer == "pool1": return
         
-        self.add_repeated(2,layers.Conv2d,  128, [3, 3], name = "conv2",  norm = batch_norm)
+        self.add_repeated(2,layers.Conv2d,  128, [3, 3], name = "conv2",  norm = False, istraining = self._istraining)
         self.add(layers.MaxPool, name = "pool2")
         if self.hparams.cut_layer == "pool2": return
         
-        self.add_repeated(3,layers.Conv2d,  256, [3, 3], name = "conv3",  norm = batch_norm)
+        self.add_repeated(3,layers.Conv2d,  256, [3, 3], name = "conv3",  norm = False, istraining = self._istraining)
         self.add(layers.MaxPool, name = "pool3")
         if self.hparams.cut_layer == "pool3": return
 
-        self.add_repeated(3, layers.Conv2d,  512, [3, 3], name = "conv4",  norm = batch_norm)
+        self.add_repeated(3, layers.Conv2d,  512, [3, 3], name = "conv4",  norm = False, istraining = self._istraining)
         self.add(layers.MaxPool, name = "pool4")
         if self.hparams.cut_layer == "pool4": return
 
-        self.add_repeated(3,layers.Conv2d,  512, [3, 3], name = "conv5",  norm = batch_norm)
+        self.add_repeated(3,layers.Conv2d,  512, [3, 3], name = "conv5",  norm = False, istraining = self._istraining)
         self.add(layers.MaxPool, name = "pool1")
 
     
-    def _get_fully_connected(self, batch_norm = None):
-        self.add(layers.FullyConnected, hidden_units = 4096, keep = 0.3, name = "fc6")
-        self.add(layers.FullyConnected, hidden_units = 4096, keep = 0.3, name = "fc7")
+    def _create_fully_connected(self, batch_norm = None):
+        self.add(layers.FullyConnected, hidden_units = 4096, keep = 0.3, name = "fc6", istraining = self._istraining)
+        self.add(layers.FullyConnected, hidden_units = 4096, keep = 0.3, name = "fc7", istraining = self._istraining)
         self.add(layers.Logits, num_classes = 1000, name = "fc8")
         
         

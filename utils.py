@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 import os,cv2
 from scipy.misc import imread, imresize
 from tensorflow.python.framework import graph_util
+from scipy.ndimage.filters import gaussian_filter
 
 def plot_images(images, subplot = (1,2), show_size=100):
     if not images or len(images) == 0:
@@ -193,7 +194,7 @@ def generate_confusion_matrix( predictions, class_names):
 
 
     # # Plot normalized confusion matrix
-    plt.figure(figsize=(10,7))
+    plt.figure(figsize=(len(class_names),len(class_names)-3))
     plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True,
                         title='Normalized confusion matrix')
     plt.grid('off')
@@ -202,14 +203,17 @@ def generate_confusion_matrix( predictions, class_names):
     plt.show()
    
 # https://github.com/adityac94/Grad_CAM_plus_plus/blob/master/misc/utils.py"
-def guided_BP(sess, model, image, label_id = -1):
+def guided_BP(sess, image, input_image, logits, keep_placeholder, label_id):
     g = tf.get_default_graph()
     with g.gradient_override_map({'Relu': 'GuidedRelu'}):
-        label_vector = model["labels"]
-        input_image = model["images"]
+        
+        
+         #define your tensor placeholders for, labels and images
+        label_index = tf.placeholder("int64", ())
+        label =  tf.one_hot(label_index, logits.shape.as_list()[-1])
 
-        logits = model["layers"]["logits"].output
-        cost = logits*label_vector
+        #get the output neuron corresponding to the class of interest (label_id)
+        cost = logits * label
 
         # Guided backpropagtion back to input layer
         gb_grad = tf.gradients(cost, input_image)[0]
@@ -217,11 +221,11 @@ def guided_BP(sess, model, image, label_id = -1):
         init = tf.global_variables_initializer()
 
  
-    output = [0.0]* logitas.get_shape().as_list()[1] #one-hot embedding for desired class activations
+    output = [0.0]* logits.get_shape().as_list()[1] #one-hot embedding for desired class activations
     output = np.array(output)
     prob = tf.nn.softmax(logits)
     if label_id == -1:
-        prob = sess.run(prob, feed_dict={input_image:image, label_vector: output.reshape((1,-1)) })
+        prob = sess.run(prob, feed_dict={input_image:image, label_index:label_id, keep_placeholder:1.0 })
         index = np.argmax(prob)
         print "Predicted_class: ", index
         output[index] = 1.0
@@ -229,32 +233,23 @@ def guided_BP(sess, model, image, label_id = -1):
     else:
         output[label_id] = 1.0
 
-    gb_grad_value = sess.run(gb_grad, feed_dict={input_image:image, label_vector: output.reshape((1,-1))})
+    gb_grad_value = sess.run(gb_grad, feed_dict={input_image:image, label_index:label_id, keep_placeholder:1.0})
 
     return gb_grad_value[0] 
 
-def grad_CAM_plus(sess, image, model, label_id, output_filename):
+def grad_CAM_plus(sess, image, input_placeholder, logits, labels_placeholder, keep_placeholder, target_conv_layer, label_id, layer_name):
     g = tf.get_default_graph()
-    hparams = model.hparams
-
-
-
+   
     #define your tensor placeholders for, labels and images
-    label_vector = model["labels"]
-    input_image = model["images"]
     label_index = tf.placeholder("int64", ())
-    logits = model["layers"]["logits"].output
-
-
-    
-    #prob = tf.placeholder("float", [None, 1000])
+    label =  tf.one_hot(label_index, logits.shape.as_list()[-1])
 
     #get the output neuron corresponding to the class of interest (label_id)
-    cost = logits * label_vector
+    cost = logits * label
 
     # Get last convolutional layer gradients for generating gradCAM++ visualization
-    target_conv_layer = model["layers"]["conv5/conv3_3"].output
     target_conv_layer_grad = tf.gradients(cost, target_conv_layer)[0]
+ 
 
     #first_derivative
     first_derivative = tf.exp(cost)[0][label_index]*target_conv_layer_grad
@@ -272,7 +267,7 @@ def grad_CAM_plus(sess, image, model, label_id, output_filename):
     prob = tf.nn.softmax(logits)
     output = np.array(output)
     if label_id == -1:
-        prob_val = sess.run(prob, feed_dict={input_image: image, label_vector:output.reshape((1,-1))})
+        prob_val = sess.run(prob, feed_dict={input_placeholder: image, label_index:label_id, keep_placeholder:1.0})
         index = np.argmax(prob_val)
         orig_score = prob_val[0][index]
         print "Predicted_class: ", index
@@ -282,7 +277,7 @@ def grad_CAM_plus(sess, image, model, label_id, output_filename):
         output[label_id] = 1.0
     
  
-    conv_output, conv_first_grad, conv_second_grad, conv_third_grad = sess.run([target_conv_layer, first_derivative, second_derivative, triple_derivative], feed_dict={input_image:image, label_index:label_id, label_vector: output.reshape((1,-1))})
+    conv_output, conv_first_grad, conv_second_grad, conv_third_grad = sess.run([target_conv_layer, first_derivative, second_derivative, triple_derivative], feed_dict={input_placeholder:image, label_index:label_id, keep_placeholder:1.0})
 
     global_sum = np.sum(conv_output[0].reshape((-1,conv_first_grad[0].shape[2])), axis=0)
 
@@ -317,37 +312,38 @@ def grad_CAM_plus(sess, image, model, label_id, output_filename):
     cam = np.maximum(grad_CAM_map, 0)
     cam = cam / np.max(cam) # scale 0 to 1.0   
 
-    cam = resize(cam, (224,224))
+    cam = resize(cam,  image.shape[:2])
     # Passing through ReLU
     cam = np.maximum(grad_CAM_map, 0)
     cam = cam / np.max(cam) # scale 0 to 1.0    
-    cam = resize(cam, (224,224))
+    cam = resize(cam,  image.shape[1:3])
 
+    
+    gb = guided_BP(sess,image, input_placeholder, logits, keep_placeholder, label_id )  
+    return get_visual_images(image, cam, gb)
 
-    gb = guided_BP(sess, model,[img1], label_id)
-    visualize(img1, cam, output_filename, gb) 
-    return cam
-
-def visualize(img, cam, filename,gb_viz):
+def normalize(img, s=0.1):
+        '''Normalize the image range for visualization'''
+        z = img / np.std(img)
+        return np.uint8(np.clip(
+            (z - z.mean()) / max(z.std(), 1e-4) * s + 0.5,
+            0, 1) * 255)
+    
+def get_visual_images(img, cam, gb_viz):
+   
+    img = np.squeeze(img)
     gb_viz = np.dstack((
             gb_viz[:, :, 2],
             gb_viz[:, :, 1],
             gb_viz[:, :, 0],
         ))
-
+    gb_viz_norm = normalize(gb_viz)
     gb_viz -= np.min(gb_viz)
     gb_viz /= gb_viz.max()
-  
-    fig, ax = plt.subplots(nrows=1,ncols=3)
+    
+    gd_img = gb_viz * np.expand_dims(np.minimum(0.25,cam), axis = 2)
 
-    plt.subplot(141)
-    plt.axis("off")
-    imgplot = plt.imshow(img)
-
-    plt.subplot(142)
-    gd_img = gb_viz*np.minimum(0.25,cam).reshape(224,224,1)
-    x = gd_img
-    x = np.squeeze(x)
+    x = np.squeeze(gd_img)
     
     #normalize tensor
     x -= x.mean()
@@ -360,26 +356,59 @@ def visualize(img, cam, filename,gb_viz):
 
     # convert to RGB array
     x *= 255
-   
-    x = np.clip(x, 0, 255).astype('uint8')
+    gd_img = np.clip(x, 0, 255).astype('uint8')
 
-    plt.axis("off")
-    imgplot = plt.imshow(x, vmin = 0, vmax = 20)
-
-    cam = (cam*-1.0) + 1.0
-    cam_heatmap = np.array(cv2.applyColorMap(np.uint8(255*cam), cv2.COLORMAP_JET))
-    plt.subplot(143)
-    plt.axis("off")
-
-    imgplot = plt.imshow(cam_heatmap)
-
-    plt.subplot(144)
-    plt.axis("off")
-    
+    cam_modified = (cam*-1.0) + 1.0
+    cam_heatmap = np.array(cv2.applyColorMap(np.uint8(255*cam_modified), cv2.COLORMAP_JET))
     cam_heatmap = cam_heatmap/255.0
-
     fin = (img*0.7) + (cam_heatmap*0.3)
-    imgplot = plt.imshow(fin)
+    
+    fin = (fin*255).astype('uint8')
+    img = (img*255).astype('uint8')
+    return [img, gb_viz_norm, gd_img, cam, cam_heatmap, fin]
 
-    plt.savefig("output/" + filename, dpi=600)
-    plt.close(fig)
+def weights_visualization(sess, weights):
+    w = sess.run(weights)
+    images = []
+    for i in range(w.shape[-1]):
+        kernel  = normalize(w[:,:,:,i].squeeze())
+        images.append(imresize(kernel, (10,10)))
+    return images
+
+       
+
+def filters_visualization(sess, input_placeholder, keep_placeholder,  filter_name, feature = 1):
+    def deprocess_image(x):
+        # normalize tensor: center on 0., ensure std is 0.1
+        x -= x.mean()
+        x /= (x.std() + 1e-8)
+        x *= 0.1
+
+        # clip to [0, 1]
+        x += 0.5
+        x = np.clip(x, 0, 1)
+
+        # convert to RGB array
+        x *= 255
+        x = np.clip(x, 0, 255).astype('uint8')
+        return x
+    
+    tensor = tf.get_default_graph().get_tensor_by_name(filter_name)
+    images = []
+    tensor_shape = tensor.shape.as_list()
+    loss = tf.reduce_mean(tensor[:,:,:,feature]) if len( tensor_shape) == 4 else tensor[0,feature]
+    gradient = tf.gradients(loss, input_placeholder)[0]
+    gradient = tf.nn.l2_normalize(gradient)
+    image_shape = input_placeholder.shape.as_list()
+    image_shape[0] = 1
+    feature_image = np.random.uniform(size=image_shape)
+    for i in range(50):
+#                 feed_dict = {self.dict_model["images"]: feature_image, self.dict_model["labels"]: label, model["keep"]:1.0}
+        feed_dict = {input_placeholder: feature_image, keep_placeholder: 1.0}
+        grad, loss_value = sess.run([gradient, loss],feed_dict=feed_dict)
+        grad = np.array(grad).squeeze()
+        step_size =  0.1 / (grad.std() + 1e-8)
+        feature_image += step_size * grad
+        feature_image = gaussian_filter(feature_image, sigma = 0.2)
+        
+    return deprocess_image(feature_image.squeeze())

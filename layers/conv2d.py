@@ -3,12 +3,12 @@ from base.baselayer import BaseLayer
 
 
 class Conv2d(BaseLayer):
-    def __init__(self, input, out_size, kernel = [3,3], norm = None, padding = "SAME", name="conv/conv"):
+    def __init__(self, input, out_size, kernel = [3,3], norm = None, padding = "SAME", name="conv/conv", istraining = True):
         self._out_size = out_size
         self._norm = norm
         self._padding = padding
         self._kernel = kernel
-        BaseLayer.__init__(self, input = input, name=name, type = "conv2d")
+        BaseLayer.__init__(self, input = input, name=name, type = "conv2d", istraining = istraining)
         
     
     def _build(self):

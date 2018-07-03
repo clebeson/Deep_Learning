@@ -5,7 +5,7 @@ import tensorflow as tf
 
 class Flatten(BaseLayer):
     def __init__(self, input, name="flatten"):
-        BaseLayer.__init__(self, input = input, name=name, type = "flatten")
+        BaseLayer.__init__(self, input = input, name=name, type = "flatten", istraining = False)
         
     
     def _build(self):

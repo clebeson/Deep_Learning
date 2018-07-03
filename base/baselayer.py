@@ -18,7 +18,7 @@ class BaseLayer():
     
     __metaclass__ = ABCMeta
     
-    def __init__(self, input, name = "conv/conv", type = "conv"):
+    def __init__(self, input, name = "conv/conv", type = "conv", istraining = True):
         self.input = input
         self.output = None
         self.weights = None
@@ -27,8 +27,18 @@ class BaseLayer():
         self.stride = None
         self.name = name
         self.type = type
+        self.istraining = istraining
         self._build()
         self.shape = self.output.shape
+        
+        self._input_data_placeholder = None
+        self._labels_placeholder = None
+        self._keep_placeholder= None
+        self._istraining_placeholder = None
+        self._logits = None
+        self._sess = None
+        self._model_name = None
+
     
     @abstractmethod
     def _build(self): pass
@@ -39,6 +49,22 @@ class BaseLayer():
     def __str__(self):
         return str(self.name)
     
+    def __delete__(self, instance):
+        del self.input
+        del self.output
+        del self.weights
+        del self.biases
+        del self._input_data_placeholder 
+        del self._labels_placeholder
+        del self._keep_placeholder
+        del self._istraining_placeholder
+        del self._logits 
+
+        
+        del self.value
+    def get_model_nome(self):
+        return self._model_name
+    
     def summary(self):
         params = 0 if self.weights is None else \
             (
@@ -46,7 +72,12 @@ class BaseLayer():
             (1 if not self.type=="fc" else np.prod(self.input.shape.as_list()[1:]) ) 
             ) +\
             np.prod(self.biases.shape.as_list()[1:])
-        return [ self.name, self.type, self.input.shape.as_list()[1:], self.output.shape.as_list()[1:], self.kernel if  self.kernel else "-", self.stride if  self.stride else "-", params ]
+            
+        input_value = self.input.shape.as_list()[1:] if not type(self.input)==list else tuple([input.shape.as_list()[1:] for input in self.input])
+            
+        return [ self._model_name, self.name, self.type, input_value, self.output.shape.as_list()[1:], self.kernel if  self.kernel else "-", self.stride if  self.stride else "-", params ]
+   
+    
     def shape(self):
         return self.output.shape
     def conv3d(self, tensor, temp_kernel, space_kernel, num_filters, stride=[1,1,1,1,1], name = "conv3d"):   
@@ -65,20 +96,16 @@ class BaseLayer():
         self.output = temp_layer
         return temp_layer
 
-    def get_3d_filters(self, temporal_kernel_size, channels, temp_filters_size, spacial_kernel_size=1, id = 0):
-        filter = tf.Variable(tf.random_normal([ temporal_kernel_size, 
-                                               spacial_kernel_size, 
-                                               spacial_kernel_size,   
-                                               channels, 
-                                               temp_filters_size ]),
-                             dtype=tf.float32, name="3d_filter")
+    def get_3d_filters(self, temp_kernel_size, channels, spatial_kernel, out_filters, name = "conv"):
+        xavier_init = tf.contrib.layers.xavier_initializer()
+        filter = tf.Variable(xavier_init([temp_kernel_size]+ spatial_kernel+ [channels, out_filters]),
+                             dtype=tf.float32, name="{}/weights".format(self.name))
 
-        biases = tf.Variable(tf.random_normal([temp_filters_size]), 
-                           name="B_temp")
+        biases = tf.Variable(xavier_init([out_filters]), 
+                           name="{}/biases".format(self.name))
         
         self.weights = filter
         self.biases = biases
-
         
         return filter, biases
 
@@ -101,18 +128,20 @@ class BaseLayer():
         input_size = np.prod(input_list[1:])
         w, b = self.get_weights(input_size , hidden_units)
         if batch_norm == "cos_norm":
-            fc = fc_cosnorm(input, w, name = "{}/cosNorm".format(self.name))
-
+            fc = self.fc_cosnorm(input, w,b, name = "{}/cosNorm".format(self.name))
+        elif batch_norm == "layer_norm":
+            fc = tf.nn.bias_add(fc, b)
+            fc = tf.contrib.layers.layer_norm(fc, scope = "{}/layer_norm".format(name))
         elif batch_norm == "batch_norm":
-            fc = tf.matmul(input, w, b)
+            fc = tf.matmul(input, w)
             fc = tf.nn.bias_add(fc, b, name="{}/biasesAdd".format(self.name))
-            fc = batch_norm(fc, name = "{}/batchNorm".format(layer_id))
+            fc = self.batch_norm(fc, name = "{}/batchNorm".format(self.name))
 
         else:
             fc = tf.matmul(input, w)
             fc = tf.nn.bias_add(fc, b, name="{}/biasesAdd".format(self.name))
 
-        if keep:
+        if keep is not None:
     #             print "Dropout activated in layer {}".format(name)
             fc = tf.nn.dropout(fc, keep, name="{}/dropout".format(self.name))
 
@@ -159,7 +188,24 @@ class BaseLayer():
         tensor_ap = tf.reduce_mean(tensor, axis=axis)
 
         # tensor_ap =  batch_norm(tensor_ap, scope = "BN_space/{}".format(layer_id))
-        return tensor_ap        
+        return tensor_ap 
+    
+    def conv3d(self, tensor, temp_kernel_size, spatial_kernel, num_filters, stride=[1,1,1,1,1], batch_norm = None, name = "conv3d"):   
+        channels = int(tensor.shape[4])
+        filter, bias = self.get_3d_filters(temp_kernel_size, channels, spatial_kernel, num_filters, name = name)
+        
+        temp_layer = tf.nn.conv3d(tensor, filter, stride, data_format= "NDHWC",
+                                  padding='VALID', name=name)
+        temp_layer = tf.nn.bias_add(temp_layer, bias)
+        if batch_norm == "layer_norm":
+                fc = tf.contrib.layers.layer_norm(fc, scope = "{}/layer_norm".format(name))
+        elif batch_norm is not None:
+            fc = self.batch_norm(fc, "{}/batch_norm".format(name) )
+
+        temp_layer = tf.nn.relu(temp_layer)
+        self.output = temp_layer
+        return temp_layer
+
 
     def conv2d(self, x, out_channels, kernel,  name = "conv",  batch_norm = False, padding = "SAME"):
         depth = x.shape.as_list()[-1]
@@ -167,10 +213,17 @@ class BaseLayer():
         self.stride = [1,1]
         conv = tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], data_format= "NHWC", 
                          padding = padding, name = self.name)
-        conv = tf.nn.bias_add(conv, b)
+        if batch_norm == "layer_norm":
+            conv = tf.nn.bias_add(conv, b)
+            conv = tf.contrib.layers.layer_norm(conv, scope = "{}/layer_norm".format(name))
+        elif batch_norm == "cos_norm":
+            conv = self.conv2d_cosnorm(conv, x, w, b, name = "{}/cos_norm".format(name))
+        elif batch_norm is not None:
+            conv = tf.nn.bias_add(conv, b)
+            conv = self.batch_norm(conv, "{}/batch_norm".format(name) )
+      
         conv = tf.nn.relu(conv)
-        if batch_norm:
-            conv = self.batch_norm(conv, "{}/batch_norm" % name)
+        
         self.output = conv
         return conv
     
@@ -181,27 +234,51 @@ class BaseLayer():
        
         fc = tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], data_format= "NHWC", 
                          padding = padding, name = self.name)
-        fc = tf.nn.bias_add(fc, b)
-        if batch_norm:
-            fc = self.batch_norm(fc, "{}/batch_norm" % name)
         
-        if keep:
+        if batch_norm == "layer_norm":
+            fc = tf.nn.bias_add(fc, b)
+            fc = tf.contrib.layers.layer_norm(fc, scope = "{}/layer_norm".format(name))
+        elif batch_norm == "cos_norm":
+            fc = self.conv2d_cosnorm(fc, x, w, b, name = "{}/cos_norm".format(name))
+        elif batch_norm is not None:
+            fc = tf.nn.bias_add(fc, b)
+            fc = self.batch_norm(fc, "{}/batch_norm".format(name) )
+        
+        if keep is not None:
             fc = tf.nn.dropout(fc, keep, name="{}/dropout".format(self.name))
 
-        if activation == "relu":
-            fc = tf.nn.relu(fc, name="{}/relu".format(self.name))
-        elif activation == "sigmoid":
+
+        if activation == "sigmoid":
             fc = tf.nn.sigmoid(fc, name="{}/sigmoid".format(self.name))
+        elif activation == "tanh":
+            fc = tf.nn.tanh(fc, name="{}/tanh".format(self.name))
+        else:
+            fc = tf.nn.relu(fc, name="{}/relu".format(self.name))
+            
         self.output = fc
         
         return fc
 
 
     def batch_norm(self, tensor, name = None):
-         return  tf.layers.batch_normalization(tensor, fused=True, 
-                                               data_format='NCHW', 
-                                               name = name,
-                                               training =  self.param.is_training)
+         return  tf.layers.batch_normalization(tensor, 
+                                               fused=True, 
+#                                                name = name,
+                                               training =  self.istraining)
+        
+    def conv2d_cosnorm(self, conv, x, w, biases, bias=0.00001, name = "cosNorm"):
+
+        kernel_sum = tf.reduce_sum(tf.square(w),[0,1,2])
+        kernel_biases = tf.add(kernel_sum,tf.square(biases))
+        kernel_norm = tf.sqrt(kernel_biases)
+        x_sum = tf.nn.conv2d(tf.square(x), tf.ones_like(w), [1, 1, 1, 1], padding='SAME')
+        x_biases = tf.add(x_sum,tf.square(bias))
+        x_norm = tf.sqrt(x_biases) 
+        biases_mul = tf.multiply(biases,bias)
+        bias = tf.nn.bias_add(conv, biases_mul)
+        conv_norm_kernel = tf.div(bias,kernel_norm)
+        conv_norm = tf.div(conv_norm_kernel,x_norm)
+        return conv_norm
 
     def fc_cosnorm(self, x, w, biases, bias=0.00001, name = "cosNorm"):
         x = tf.add(x, bias)
@@ -217,6 +294,51 @@ class BaseLayer():
 
 
         return tf.divide(y ,(x * w), name = name)
+    
+    def visualize_weights(self):
+        return utils.weights_visualization(self._sess, self.weights)
+    
+    
+    
+    def visualize_features(self, features= [1], activation = False):
+        if type(features) == int:
+            features = [features]
+        elif not type(features) == list:
+            raise Exception("Features needs to be a list or an integer")
+            
+        if activation or  self.weights is None:
+            name = self.output.name
+        else:
+            name = self.weights.name
+            name = "/".join(name.split("/")[:-1])+":0"
+            
+        images = []
+        
+        for feature in features:
+            image= utils.filters_visualization(self._sess, self._input_data_placeholder, self._istraining_placeholder, name, feature)
+            images.append(image)
+        return images
+    
+    def activation_maps(self, images=[], labels=[]):
+        
+#         images = self.dataset.get_sample() if not images or len(images) == 0 else images
+        if not type(images) == list:
+            images = [images]
+        
+        if not type(labels) == list:
+            labels = [labels]
+        elif not labels:
+            labels = [-1]*len(images)
+            
+        image_results = []
+        for i, image in enumerate(images):
+            image = np.expand_dims(image, axis=0) if len(list(image.shape)) == 3 else image
+            results = utils.grad_CAM_plus(self._sess, image, self._input_data_placeholder , self._logits.output, self._labels_placeholder, self._keep_placeholder, self.output, labels[i], self.name)
+            image_results.append(results)
+        return image_results
+            
+            
+        
         
         
 
