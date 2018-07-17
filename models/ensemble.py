@@ -23,7 +23,7 @@ class EnsembleType(Enum):
     CONV3D = 4
 
 class Ensemble(BaseModel):
-    def __init__(self, dataset, multiple_inputs = False):
+    def __init__(self, dataset,  type, multiple_inputs = False):
         dataset.hparams.cut_layer = ""
         BaseModel.__init__(self,
                            info = {
@@ -38,7 +38,7 @@ class Ensemble(BaseModel):
         self.ckpts = []
         self._models = []
         self._multiple_inputs = multiple_inputs
-        self._type = EnsembleType.CONV3D
+        self._type = type
         self._layers = []
 
     def add_models(self, models):
@@ -65,15 +65,17 @@ class Ensemble(BaseModel):
                     hparams.cut_layer = "" if model.cut_layer is None else model.cut_layer
                     hparams.fine_tunning = True
                     model.hparams = hparams
-                    model._build_only_cnn(input_images)
+                    model._build_only_cnn(input_images, self.dict_model["istraining"])
                     cnn_layers.append(model.get_layers(-1))
                     self._layers += model._layers 
                 
                 if self._type == EnsembleType.DECAF:
                     self.add(layers.Decaf, cnn_layers)
                 elif self._type == EnsembleType.CONV3D:
-                    cnn_layers = [tf.expand_dims(cnn.output, axis = 1) for cnn in cnn_layers]
-                    input = tf.concat( cnn_layers, axis = 1, name='3D_concat')
+                   
+                    cnns_nomalized = [ tf.nn.lrn(cnn.output) for cnn in cnn_layers] #local_response_normalization
+                    cnns_nomalized = [tf.expand_dims(cnn, axis = 1) for cnn in cnns_nomalized]
+                    input = tf.concat( cnns_nomalized, axis = 1, name='3D_concat')
                     self.add(layers.Conv3d, input = input, temp_filter_size = len(cnn_layers), 
                              num_filters = input.shape.as_list()[-1], kernel = [1,1])
                     self._layers[-1].output = tf.squeeze(self._layers[-1].output,axis = 1)
@@ -93,28 +95,29 @@ class Ensemble(BaseModel):
             tf.reset_default_graph()
 
             self._istraining = istraining
-            if not istraining:
-                self.dataset.set_tfrecord(False)
    
             if  not new_fc:
+                self.hparams.cut_layer = self.info["last_layer"]
                 self.hparams.fine_tunning = True
                 
             with tf.device("cpu:0"):
                 if self.dataset.istfrecord():
                     input_data, labels = self.dataset.get_tfrecord_data()
                     self.hparams.bottleneck = False
-    #                     input_images =  self.input_data
+                    
                 else:
-                    input_data = tf.placeholder(tf.float32, shape=[None,self.hparams.height, 
-                                                              self.hparams.width, 
-                                                              self.hparams.channels], 
-                                                              name='images')
-
+                    h, w = self.hparams.height, self.hparams.width
+                    if self.hparams.data_augmentation and not self.hparams.auto_crop == (0,0): 
+                        
+                        h = self.hparams.height - self.hparams.auto_crop[0]
+                        w = self.hparams.width - self.hparams.auto_crop[1]
+                    input_data = tf.placeholder(tf.float32, shape=[None,h, w, self.hparams.channels], name='images')
                     labels = tf.placeholder(tf.float32, shape=[None, self.hparams.num_classes], name='labels')
+            
                 self.dict_model["images"] = input_data 
                 self.dict_model["labels"] = labels
             self.dict_model["keep"] = tf.placeholder(tf.float32, name='dropout_keep')
-            self.dict_model["istraining"] = tf.placeholder(tf.float32, name='istraining')
+            self.dict_model["istraining"] = tf.placeholder(tf.bool, name='istraining')
              
             self._transfer_learning(input_data, only_cnn = new_fc) if  is_tf else self._from_scratch(
                 input_data, only_cnn = new_fc)
@@ -131,7 +134,7 @@ class Ensemble(BaseModel):
                 self.sess, self._saver = self.create_monitored_session(self.dict_model)
        
             for l in self._layers:
-                l._input_data_placeholder = self.dict_model["images"]
+                l._model_input_data_placeholder = self.dict_model["images"]       
                 l._labels_placeholder = self.dict_model["labels"]
                 l._keep_placeholder= self.dict_model["keep"]
                 l._istraining_placeholder = self.dict_model["istraining"]
@@ -163,8 +166,10 @@ class Ensemble(BaseModel):
         config.gpu_options.allow_growth = True
  
         sess = tf.Session(config=config)
-        all_vars = tf.all_variables()
+        all_vars = tf.global_variables()
+        all_vars.extend(tf.local_variables())
         saver = tf.train.Saver( var_list = all_vars, max_to_keep=1)
+#         sess.run(tf.variables_initializer(all_vars))
         
        
         ckpt_path = self._generate_checkpoint_path()
@@ -178,7 +183,7 @@ class Ensemble(BaseModel):
             except Exception as e:
                 
                 print("It was not possible to restore the model. All variables will be initialized with their default values.")
-                sess.run(tf.initialize_variables(all_vars))
+                sess.run(tf.variables_initializer(all_vars))
                 print(e)
             
              
@@ -190,18 +195,25 @@ class Ensemble(BaseModel):
 
             self._models.sort(key=lambda model: len(model._layers),reverse=True)
             for model in self._models:
-                to_restore =  [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, 
-                                                                scope=model.info["model_name"]) if var.name in model.vars_to_restore ]
+                to_restore =  [var for var in all_vars if var.name in model.vars_to_restore ]
                 res = tf.train.Saver(to_restore)
 
                 try:
 
                     model_path = os.path.join(self._ckpt_dir , model.info["file_name"])
+                    for var in model_path:
+                        print(var.name)
+                    print("************************")
+
                     print("Restoring variables from: {}".format(model_path))
                     res.restore(sess, model_path)
 
                 except:
                     to_restore_names = ["/".join(var.name.split("/")[1:]) for var in to_restore]
+                    for var in to_restore:
+                        print(var.name)
+                    print("************************")
+
                     alread_restored = [var 
                                      for var in restored 
                                      if var.name.split("/")[0]  == model.info["model_name"]
@@ -223,7 +235,7 @@ class Ensemble(BaseModel):
             restored_names = [var.name for var in restored]        
             unrestored = [var for var in all_vars if var.name not in restored_names]                    
             print("Initializing only unrestored variables")
-            sess.run(tf.initialize_variables(unrestored))
+            sess.run(tf.variables_initializer(unrestored))
             
 
                   

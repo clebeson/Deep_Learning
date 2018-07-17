@@ -18,7 +18,7 @@ class BaseLayer():
     
     __metaclass__ = ABCMeta
     
-    def __init__(self, input, name = "conv/conv", type = "conv", istraining = True):
+    def __init__(self, input, name = "conv/conv", type = "conv", istraining = None):
         self.input = input
         self.output = None
         self.weights = None
@@ -27,17 +27,19 @@ class BaseLayer():
         self.stride = None
         self.name = name
         self.type = type
+        self._my_input_data_placeholder = None
+        self._model_input_data_placeholder = None
+        self._labels_placeholder = False
+        self._keep_placeholder= None
+        
+        self._logits = None
+        self._sess = None
+        self._model_name = None
         self.istraining = istraining
         self._build()
         self.shape = self.output.shape
         
-        self._input_data_placeholder = None
-        self._labels_placeholder = None
-        self._keep_placeholder= None
-        self._istraining_placeholder = None
-        self._logits = None
-        self._sess = None
-        self._model_name = None
+
 
     
     @abstractmethod
@@ -261,10 +263,10 @@ class BaseLayer():
 
 
     def batch_norm(self, tensor, name = None):
-         return  tf.layers.batch_normalization(tensor, 
+        return  tf.layers.batch_normalization(tensor, 
                                                fused=True, 
 #                                                name = name,
-                                               training =  self.istraining)
+                                               training =  self._istraining_placeholder)
         
     def conv2d_cosnorm(self, conv, x, w, biases, bias=0.00001, name = "cosNorm"):
 
@@ -315,7 +317,7 @@ class BaseLayer():
         images = []
         
         for feature in features:
-            image= utils.filters_visualization(self._sess, self._input_data_placeholder, self._istraining_placeholder, name, feature)
+            image= utils.filters_visualization(self._sess, self._model_input_data_placeholder, self._istraining_placeholder, name, feature)
             images.append(image)
         return images
     
@@ -333,7 +335,8 @@ class BaseLayer():
         image_results = []
         for i, image in enumerate(images):
             image = np.expand_dims(image, axis=0) if len(list(image.shape)) == 3 else image
-            results = utils.grad_CAM_plus(self._sess, image, self._input_data_placeholder , self._logits.output, self._labels_placeholder, self._keep_placeholder, self.output, labels[i], self.name)
+            results = utils.grad_CAM_plus(self._sess, image, self._model_input_data_placeholder, 
+                                           self._logits.output, self._labels_placeholder, self._keep_placeholder, self.output, labels[i], self.name)
             image_results.append(results)
         return image_results
             

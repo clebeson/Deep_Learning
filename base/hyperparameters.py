@@ -5,7 +5,7 @@ class Hyperparameters:
             #Default parameters for  dataset
             self.height = 32 #The height of the image (The distance from the top to the bottom)
             self.width = 32   #The width of the image (The distance between the two sides of the image)
-            self.channels = 3 #Number of channels in the image. Ex.: for a RGB image this number must be "3", for a grayscaled, "1".
+            self.channels = 3 #Number of channels in the image. Ex.: for a RGB image this number must be "3", for a grayscaled, "1".        
             self.auto_crop = (0, 0) # It signs whether the data augmentation will proceed with auto cropping or not.
             self.data_augmentation = False #It signs whether the data augmentation procedure must be applied or not. 
             self.num_classes = 10 #Number of classes of the data

@@ -194,7 +194,11 @@ def generate_confusion_matrix( predictions, class_names):
 
 
     # # Plot normalized confusion matrix
-    plt.figure(figsize=(len(class_names),len(class_names)-3))
+    if len(class_names) > 5:
+        figsize=(len(class_names),len(class_names)-3)
+    else:
+        figsize=(5,5)
+    plt.figure(figsize=figsize)
     plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True,
                         title='Normalized confusion matrix')
     plt.grid('off')
@@ -331,7 +335,7 @@ def normalize(img, s=0.1):
     
 def get_visual_images(img, cam, gb_viz):
    
-    img = np.squeeze(img)
+    img = np.squeeze(img)[:,:,:3]
     gb_viz = np.dstack((
             gb_viz[:, :, 2],
             gb_viz[:, :, 1],

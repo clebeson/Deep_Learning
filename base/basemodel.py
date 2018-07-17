@@ -17,7 +17,7 @@ from base.baselayer import BaseLayer
 from texttable import *
 from hurry.filesize import size, si
 from scipy.ndimage.filters import gaussian_filter as gauss
-
+import sklearn.metrics as sklm
 
 class BaseModel:
     __metaclass__ = ABCMeta
@@ -39,7 +39,6 @@ class BaseModel:
         self.info = info
         self.sess = None
         self.built = False
-          
         self.dict_model = {
                       "global_step": None,
                       "images": None,
@@ -70,57 +69,57 @@ class BaseModel:
         
         if not issubclass(layer, BaseLayer):
             raise Exception("The layer must be a ""BaseModel"" subclass rather than {}".format(type(layer)))
-  
-        if args:
-             net = layer(*args, **kwargs)  
+            
+        keys = kwargs.keys()
+        if not self._layers:
+            input = self.dict_model["images"]
+        elif "input" in keys:
+            input = kwargs["input"]
+            kwargs.pop("input")
         else:
-            keys = kwargs.keys()
-            if "input" not in keys:
-                kwargs["input"] = self.dict_model["images"] if len(self._layers) == 0 else self._layers[-1]
+            input =  self._layers[-1]
+        
+        
+        if args:
+             net = layer(input,*args, **kwargs)  
+        else:
             if "name" not in keys:
                 kwargs["name"] = layer.__name__.lower()
                 
+            kwargs["input"] = input  
             net = layer(**kwargs)  
-            
+       
+        net._my_input_data_placeholder = self.dict_model["images"]       
         self._layers.append(net)
         self.dict_model["layers"].update({net.name: net})
         
         
     def add_repeated(self, num_repetition, layer, *args, **kwargs):
-        
-        if not issubclass(layer,BaseLayer):
-            raise Exception("The layer must be a ""BaseModel"" type rather than {}".format(type(layer)))
-        
-        keys = kwargs.keys()
-        if "input" in keys:
-            net = kwargs["input"]
-            kwargs.pop("input")
-        else:
-            net = self.dict_model["images"] if not self._layers else self._layers[-1]
-        
-        if "name" in keys:
+
+        if "name" in kwargs.keys():
             name = kwargs["name"]
-            del kwargs["name"]
         else:
             name = layer.__name__
 
-        for i in range(1,num_repetition+1):         
-            net = layer(net, *args, name= "{}/{}_{}".format( name,name,i), **kwargs) 
-            self._layers.append(net)
-            self.dict_model["layers"].update({net.name: net})
+        for i in range(1,num_repetition+1):
+            
+            kwargs["name"] = "{}/{}_{}".format( name,name,i)
+            self.add(layer, *args, **kwargs)
+
         
             
   
-    def _build_only_cnn(self, input_images, is_tf = True):
+    def _build_only_cnn(self, input_images, istraining, is_tf = True):
             self.close()
             print "Buiding cnn from ""{}"" model.".format(self.info["model_name"])
             self.dict_model["images"] = input_images
-                
+            self.dict_model["istraining"] = istraining     
             with tf.name_scope(self.info["model_name"]):
                 cnn  = self._transfer_learning(input_images, only_cnn = True) if  is_tf else self._from_scratch(input_images, 
                                                                                                                 only_cnn = True) 
             for l in self._layers:
                 l._model_name = self.info["model_name"]
+                l._istraining_placeholder = istraining
                 
             self.built = True
 
@@ -163,8 +162,6 @@ class BaseModel:
             tf.reset_default_graph()
 
             self._istraining = istraining
-            if not istraining:
-                self.dataset.set_tfrecord(False)
    
             if  not new_fc:
                 self.hparams.cut_layer = self.info["last_layer"]
@@ -176,11 +173,13 @@ class BaseModel:
                     self.hparams.bottleneck = False
     #                     input_images =  self.input_data
                 else:
-                    input_data = tf.placeholder(tf.float32, shape=[None,self.hparams.height, 
-                                                              self.hparams.width, 
-                                                              self.hparams.channels], 
-                                                              name='images')
-
+                    h, w = self.hparams.height, self.hparams.width
+                    if self.hparams.data_augmentation and not self.hparams.auto_crop == (0,0): 
+                        
+                        h = self.hparams.height - self.hparams.auto_crop[0]
+                        w = self.hparams.width - self.hparams.auto_crop[1]
+                    input_data = tf.placeholder(tf.float32, shape=[None,h, w, self.hparams.channels], name='images')
+                    
                     labels = tf.placeholder(tf.float32, shape=[None, self.hparams.num_classes], name='labels')
                 self.dict_model["images"] = input_data 
                 self.dict_model["labels"] = labels
@@ -212,7 +211,7 @@ class BaseModel:
                 self.sess, self._saver = self.create_monitored_session(self.dict_model)
        
             for l in self._layers:
-                l._input_data_placeholder = self.dict_model["images"]
+                l._model_input_data_placeholder = self.dict_model["images"]       
                 l._labels_placeholder = self.dict_model["labels"]
                 l._keep_placeholder= self.dict_model["keep"]
                 l._istraining_placeholder = self.dict_model["istraining"]
@@ -243,13 +242,12 @@ class BaseModel:
             for i, num_neurons in enumerate(hidden): 
                 if i == 0 and input is not None:
                     
-                    self.add(layers.FullyConnected, hidden_units = num_neurons, input = input,
-                                        keep = keep, norm = self.hparams.normalization, 
-                                        name = "fc{}".format(id), istraining = self._istraining )
+                    self.add(layers.FullyConnected, hidden_units = num_neurons, istraining = self.dict_model["istraining"], 
+                             input = input, keep = keep, norm = self.hparams.normalization,
+                             name = "fc{}".format(id))
                 else:
-                    self.add(layers.FullyConnected, hidden_units = num_neurons,
-                                        keep = keep, norm = self.hparams.normalization, 
-                                        name = "fc{}".format(id), istraining = self._istraining)
+                    self.add(layers.FullyConnected, hidden_units = num_neurons, istraining = self.dict_model["istraining"],
+                             keep = keep, norm = self.hparams.normalization, name = "fc{}".format(id))
                 id += 1
 
             self.add(layers.Logits, num_classes = self.hparams.num_classes)
@@ -341,10 +339,22 @@ class BaseModel:
             global_step = tf.train.get_or_create_global_step()
             learning_rate = tf.train.exponential_decay(self.hparams.initial_learning_rate, global_step,
                                                        self.hparams.decay_steps, self.hparams.decay_rate, staircase=True)
+        with tf.name_scope('train_accuracy'):
+            pred, lab = tf.argmax(logits, 1), tf.argmax(self.dict_model["labels"], 1)
+            _,acc = tf.metrics.accuracy(predictions = pred, labels = lab)
+            _,precision = tf.metrics.precision(predictions = pred, labels = lab)
+            _,recall = tf.metrics.recall(predictions = pred, labels = lab)
+            f1_score = (2 * (precision * recall)) / (precision + recall)
+#           acc = tf.equal(tf.argmax(logits, 1), tf.argmax(self.dict_model["labels"], 1))
+#             acc = tf.reduce_mean(tf.cast(acc, tf.float32))
+            tf.summary.scalar("accuracy",recall)
+        class_weights = tf.multiply(2.14, tf.cast(tf.equal(lab, 1), tf.float32)) + 1
         with tf.name_scope('loss'):
-                loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits, labels=self.dict_model["labels"]))
+                loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(logits=logits, onehot_labels=self.dict_model["labels"], weights = class_weights))
+
                 if self.hparams.regularizer_type:
                     loss = self.regularize(loss, self.hparams.regularizer_type, self.hparams.regularizer_scale)
+                #                 loss += loss/(precision*recall+1e-5)
                 tf.summary.scalar("loss", loss)
 
         with tf.name_scope('sgd'):
@@ -352,18 +362,10 @@ class BaseModel:
 #             with tf.control_dependencies(update_ops):
                 optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
 
-        with tf.name_scope('train_accuracy'):
-            acc = tf.equal(tf.argmax(logits, 1), tf.argmax(self.dict_model["labels"], 1))
-            acc = tf.reduce_mean(tf.cast(acc, tf.float32))
-            tf.summary.scalar("accuracy", acc)
-
-
-
-        
         
         self.dict_model["loss"] = loss
         self.dict_model["optimizer"] = optimizer
-        self.dict_model["accuracy"] = acc
+        self.dict_model["metrics"] = {"accuracy":acc,"precision":precision,"":recall,"f1_score":f1_score}
         self.dict_model["global_step"] = global_step
     
     def regularize(self, loss, type = 1, scale = 0.005, scope = None):
@@ -400,9 +402,11 @@ class BaseModel:
 #                                             save_summaries_steps=iter_per_epoch,
 #                                             config=config) 
         sess = tf.Session(config=config)
-        all_vars = tf.all_variables()
+        all_vars = tf.global_variables()
+        all_vars.extend(tf.local_variables())
         saver = tf.train.Saver( var_list = all_vars, max_to_keep=1)
-        
+        sess.run(tf.variables_initializer(all_vars))
+
         ckpt_path = self._generate_checkpoint_path()
         if not os.path.exists(ckpt_path):
             os.makedirs(ckpt_path)
@@ -415,30 +419,24 @@ class BaseModel:
         else:
             
             to_restore =  [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=self.info["model_name"]) if var.name in self.vars_to_restore ]
-            
-            res = tf.train.Saver(to_restore)
-            
-            
-          
+    
             
             try:
-                
-                model_path = "{}/{}".format(self._ckpt_dir, self.info["file_name"])
-                print("Restoring variables from: {}".format(model_path))
-                res.restore(sess, model_path)
-                restored = [var.name for var in to_restore]
+                if to_restore:
+                    res = tf.train.Saver(to_restore)
+                    model_path = "{}/{}".format(self._ckpt_dir, self.info["file_name"])
+                    print("Restoring variables from: {}".format(model_path))
+                    res.restore(sess, model_path)
 
 
-                unrestored = [var for var in all_vars if var.name not in restored]
-
-                print("Initializing only unrestored variables")
-                sess.run(tf.initialize_variables(unrestored))
-#                 for i in unrestored:
-#                     print(i.name)
-  
+    
+                else:
+                 print("Initializing variables")
+#                  sess.run(tf.initialize_variables(all_vars))
+                   
             except Exception as e: 
                 print("Error in the restore process. Initializing from scratch instead!")
-                sess.run(tf.initialize_variables(all_vars))
+                
                 
                 print("\n***** Error message *******")
                 print("--> {}".format( e.message))
@@ -460,7 +458,8 @@ class BaseModel:
             threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
             try:
                     
-                feed_dict={model["keep"]:self.hparams.keep}
+                feed_dict={model["keep"]:self.hparams.keep, self.dict_model["istraining"]:True}
+                step = 0
                 for epoch in range(self.hparams.num_epochs):
                     start_time = time()
 
@@ -470,7 +469,7 @@ class BaseModel:
                     sum_acc= 0
                     for s in range(steps_per_epoch):
                         _, batch_loss, batch_acc, step = self.sess.run(
-                        [model["optimizer"], model["loss"], model["accuracy"], model["global_step"]], feed_dict=feed_dict)
+                        [model["optimizer"], model["loss"], model["metrics"]["accuracy"], model["global_step"]], feed_dict=feed_dict)
                         sum_acc += batch_acc * self.hparams.batch_size
 
                     duration = time() - start_time
@@ -479,6 +478,7 @@ class BaseModel:
                                      (steps_per_epoch*self.hparams.batch_size / duration) 
                                     ))
                     if epoch %5 == 0:
+                        print "The model was saved."
                         self._saver.save(self.sess,ckpt_path, global_step=step)
                         
 
@@ -507,10 +507,10 @@ class BaseModel:
 
                     batch_data, batch_labels = self.dataset.next_batch()
                     
-                    feed_dict={input_data_placeholder: batch_data, model["labels"]: batch_labels, model["keep"]:self.hparams.keep}
+                    feed_dict={input_data_placeholder: batch_data, model["labels"]: batch_labels, model["keep"]:self.hparams.keep, self.dict_model["istraining"]:True}
 
                     _, batch_loss, batch_acc, step = self.sess.run(
-                    [model["optimizer"], model["loss"], model["accuracy"], model["global_step"]],
+                    [model["optimizer"], model["loss"], model["metrics"]["accuracy"], model["global_step"]],
                     feed_dict=feed_dict)
                     sum_acc += batch_acc * self.hparams.batch_size
 
@@ -523,8 +523,8 @@ class BaseModel:
                
                 acc = self._evaluate( val_data, val_labels )
 
-                if acc > best_accuracy:
 
+                if acc > best_accuracy:
                     self._saver.save(self.sess,ckpt_path, global_step=step)
                     if best_accuracy  > 0:
                         print "The model was saved. The current evaluation accuracy ({:.2f}%) is greater than the last one saved({:.2f}%).".format(acc*100,best_accuracy*100)
@@ -587,7 +587,8 @@ class BaseModel:
             
 
         
-    def _evaluate(self, data, labels, batch_size = 100):
+    def _evaluate(self, data, labels, batch_size = 32):
+        print(len(data))
         if (not self.hparams.fine_tunning) and self.hparams.bottleneck:
             input_data_placeholder = self.dict_model["bottleneck_input"]
         else:
@@ -614,8 +615,8 @@ class BaseModel:
             batch_labels = labels[next_bach_indices]
             
 
-            acc = self.sess.run(self.dict_model["accuracy"],
-                feed_dict={input_data_placeholder: batch_data, self.dict_model["labels"]: batch_labels, self.dict_model["keep"]:1.0})
+            acc= self.sess.run(self.dict_model["metrics"]["accuracy"],
+                feed_dict={input_data_placeholder: batch_data, self.dict_model["labels"]: batch_labels, self.dict_model["keep"]:1.0, self.dict_model["istraining"]:False})
 
             global_acc += (acc * len(next_bach_indices))
             
@@ -629,27 +630,18 @@ class BaseModel:
 
     def test_prediction(self, batch_size = 96):
         if self._istraining or not self.built:
+            self.dataset.set_tfrecord(False)
             self.build(istraining = False)
         logits = self._layers[-1].output
 
-      
-
-     
-        data, labels = self.dataset.get_test()
-
+        data, labels = self.dataset.get_test(hot=False)
+        print(data.shape, labels.shape)
             
         if (not self.hparams.fine_tunning) and self.hparams.bottleneck:
             input_data_placeholder = self.dict_model["bottleneck_input"]
         else:
             input_data_placeholder = self.dict_model["images"]
-        
         model = self.dict_model
-
-        graph_pred= {
-                       "classes": tf.argmax(logits, 1),
-                       "probs" :  tf.nn.softmax(logits), 
-                       "labels": tf.argmax(self.dict_model["labels"], 1)
-                       }
         
         predictions = {
                        "classes":[],
@@ -659,7 +651,7 @@ class BaseModel:
 
         size = len(data)//batch_size
         indices = list(range(len(data)))
-
+        
         for i in range(size+1):
 
             begin = i*batch_size
@@ -669,19 +661,40 @@ class BaseModel:
             next_bach_indices = indices[begin:end]
             batch_xs = data[next_bach_indices]
             batch_ys = labels[next_bach_indices]
+            if self.hparams.data_augmentation and not self.hparams.auto_crop == (0,0): 
+                prob = self._pred_with_crop(input_data_placeholder, batch_xs, 
+                                            self.hparams.crop[0], self.hparams.crop[1])
+            else:
+                prob = self.sess.run(tf.nn.softmax(logits),
+                    feed_dict={input_data_placeholder: batch_xs, self.dict_model["keep"]:1.0,
+                               self.dict_model["istraining"]:False})
 
-            pred = self.sess.run(graph_pred,
-                feed_dict={input_data_placeholder: batch_xs, self.dict_model["labels"]: batch_ys, self.dict_model["keep"]:1.0})
-
-            predictions["classes"].extend(pred["classes"])
-            predictions["probs"].extend(pred["probs"])
-            predictions["labels"].extend(pred["labels"])
+            predictions["classes"].extend(np.argmax(prob,1))
+            predictions["probs"].extend(prob)
+            predictions["labels"].extend(batch_ys)
 
 
         correct = list (map(lambda x,y: 1 if x==y else 0, predictions["labels"] , predictions["classes"]))
         acc = np.mean(correct ) *100
-
+        p,r,f,s = sklm.precision_recall_fscore_support(predictions["labels"],  predictions["classes"]) 
         mes = "--> Prediction accuracy: {:.2f}% ({}/{})"
         print(mes.format( acc, sum(correct), len(data)))
+        mes = "--> (presision, recol, F1-score) ( {},{},{}"
+        print(mes.format(p,r,f))
 
         return predictions
+
+    def _pred_with_crop(self, input_data_placeholder, batch_xs, batch_y, crop_h,crop_w):
+        logits = self._layers[-1].output
+        batchs = [batch_xs[:,:-crop_w,:-batch_xs,:], batch_xs[:,crop_w:,:-batch_xs,:], batch_xs[:,crop_w:,crop_h:,:], batch_xs[:,:-crop_w,crop_h:,:]] 
+        preds = []
+        for batch in batchs:
+            pred = self.sess.run(logits,
+                feed_dict={input_data_placeholder: batch,self.dict_model["keep"]:1.0, self.dict_model["istraining"]:False})
+            preds.append(pred)
+        preds = np.array(preds)
+
+        sum_logits = np.sum(preds,0, keepdims = False)
+        prob = self.sess.run(tf.nn.softmax(sum_logits),1)
+        return prob
+

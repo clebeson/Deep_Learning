@@ -47,7 +47,9 @@ class BaseDataset(object):
     def istfrecord(self):
         return self._tfrecord
     def set_tfrecord(self, tfrercord):
+        
         self._tfrecord = tfrercord
+        print("self._tfrecord=", self._tfrecord)
     
     def get_name(self):
         return self._name
@@ -93,20 +95,20 @@ class BaseDataset(object):
         return self._train_data, self._dense_to_one_hot(self._train_labels) if hot else self._train_labels
     
     def get_test(self, hot = True): 
-        if len(self._train_data) == 0:
+        if len(self._test_data) == 0:
             print("Loading test data...")
             self.load("test")
         return self._test_data, self._dense_to_one_hot(self._test_labels) if hot else self._test_labels
     
     def get_validation(self, hot = True): 
-        if len(self._train_data) == 0:
+        if len(self._validation_data) == 0:
             print("Loading validation data...")
             self.load("validation")
         return self._validation_data, self._dense_to_one_hot(self._validation_labels) if hot else  self._validation_labels
     
     def get_tfrecord_data(self, run_type = "train"):
         filename = self._generate_tfrecord_file(run_type)
-        shuffled = False if type=="test" or "validation" else True
+        shuffled = False if type=="test" or type == "validation" else True
         return self._load_inputs(filename, shuffled )
         
     def next_batch(self): 
@@ -291,10 +293,11 @@ class BaseDataset(object):
         return file_name
     
     def _tf_data_aug(self, data):
-        data = tf.random_crop(video, [self.hparams.height-self.hparams.auto_crop[0], 
-                                      self.hparams.width-self.hparams.auto_crop[2],
+        print("Data augmentation enabled!")
+        data = tf.random_crop(data, [self.hparams.height-self.hparams.auto_crop[0], 
+                                      self.hparams.width-self.hparams.auto_crop[1],
                                       self.hparams.channels])
-        data = tf.image.random_flip_left_right(video)
+        data = tf.image.random_flip_left_right(data)
 
         return data
         
@@ -316,10 +319,12 @@ class BaseDataset(object):
         data = tf.cast(data, tf.float32)
         data = tf.reshape(data, [self.hparams.height, self.hparams.width, self.hparams.channels])
         if self.hparams.data_augmentation and is_train: 
+            
             data = self._tf_data_aug(data)
 
 
         else:
+            
             data = tf.squeeze(tf.image.resize_bicubic(tf.expand_dims(data,0), 
                                                       [self.hparams.height-self.hparams.auto_crop[0],
                                                        self.hparams.width-self.hparams.auto_crop[1]]
@@ -328,6 +333,7 @@ class BaseDataset(object):
         return data, label
 
     def _load_inputs(self, filename, shuffled = True):
+        
         queue = tf.train.string_input_producer([filename])
 
         data, label = self._read_decode_distort(queue, shuffled )

@@ -3,10 +3,11 @@ from base.baselayer import BaseLayer
 
 
 class FullyConnected(BaseLayer):
-    def __init__(self,input, hidden_units, name="fc", keep = None, activation = "relu", norm = None, istraining = True):
+    def __init__(self,input, hidden_units, istraining, name="fc", keep = None, activation = "relu", norm = None):
         self._hidden_units = hidden_units
         self._keep = keep
         self._norm = norm
+        self._istraining_placeholder = istraining
         self._activation = activation
         BaseLayer.__init__(self, input = input, name=name, type = "fc_conv", istraining = istraining)
         
