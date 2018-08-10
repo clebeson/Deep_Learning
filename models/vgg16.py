@@ -8,11 +8,9 @@ import numpy as np
 import os.path
 from base.basemodel import BaseModel
 from  base.hyperparameters import Hyperparameters
-from itertools import izip as zip
 from time import time
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-import base.functions as bf
 import layers
 
 
@@ -50,7 +48,33 @@ class Vgg16(BaseModel):
         if self.hparams.cut_layer == "pool4": return
 
         self.add_repeated(3,layers.Conv2d,  512, [3, 3], istraining = self.dict_model["istraining"],name = "conv5",  norm = False)
-        self.add(layers.MaxPool, name = "pool1")
+        self.add(layers.MaxPool, name = "pool5")
+
+#     def _create_cnn(self, inputs, batch_norm = None, pretrained_weights = None): 
+#         self.add(layers.Conv2d, 64, [3, 3],  istraining = self.dict_model["istraining"], name = "conv1/conv1_1",  norm = False)
+#         self.add(layers.Conv2d, 64, [3, 3],  stride = [1,2,2,1], istraining = self.dict_model["istraining"], name = "conv1/conv1_2",  norm = False)
+# #         self.add(layers.MaxPool,name = "pool1")
+#         if self.hparams.cut_layer == "pool1": return
+        
+#         self.add(layers.Conv2d,  128, [3, 3], istraining = self.dict_model["istraining"],name = "conv2/conv2_1",  norm = False)
+#         self.add(layers.Conv2d,  128, [3, 3], stride = [1,2,2,1], istraining = self.dict_model["istraining"],name = "conv2/conv2_2",  norm = False)
+# #         self.add(layers.MaxPool, name = "pool2")
+#         if self.hparams.cut_layer == "pool2": return
+        
+#         self.add_repeated(2,layers.Conv2d,  256, [3, 3], istraining = self.dict_model["istraining"],name = "conv3",  norm = False)
+#         self.add(layers.Conv2d,  256, [3, 3], stride = [1,2,2,1], istraining = self.dict_model["istraining"],name = "conv3/conv3_3",  norm = False)
+# #         self.add(layers.MaxPool, name = "pool3")
+#         if self.hparams.cut_layer == "pool3": return
+
+#         self.add_repeated(2, layers.Conv2d,  512, [3, 3], istraining = self.dict_model["istraining"],name = "conv4",  norm = False)
+#         self.add(layers.Conv2d,  512, [3, 3], stride = [1,2,2,1], istraining = self.dict_model["istraining"],name = "conv4/conv4_3",  norm = False)
+
+# #         self.add(layers.MaxPool, name = "pool4")
+#         if self.hparams.cut_layer == "pool4": return
+
+#         self.add_repeated(3,layers.Conv2d,  512, [3, 3], istraining = self.dict_model["istraining"],name = "conv5",  norm = False)
+#         self.add(layers.Conv2d,  512, [3, 3], stride = [1,2,2,1], istraining = self.dict_model["istraining"],name = "conv5/conv5_3",  norm = False)
+# #         self.add(layers.MaxPool, name = "pool5")
 
     
     def _create_fully_connected(self, batch_norm = None):

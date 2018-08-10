@@ -97,7 +97,7 @@ def maybe_download_and_extract(url, main_directory,filename, original_name):
             data = f.read()
             with open(zip_file, "wb") as code:
                 code.write(data)
-    #                 file_path, _ = urlretrieve(url=url, filename= zip_file, reporthook=_print_download_progress)
+#             file_path, _ = urlretrieve(url=url, filename= zip_file, reporthook=_print_download_progress)
         except:
                 print("This could be for a problem with the storage site. Try again later")
                 return
@@ -196,6 +196,7 @@ def generate_confusion_matrix( predictions, class_names):
     # # Plot normalized confusion matrix
     if len(class_names) > 5:
         figsize=(len(class_names),len(class_names)-3)
+        figsize=(10,8)
     else:
         figsize=(5,5)
     plt.figure(figsize=figsize)
@@ -207,7 +208,7 @@ def generate_confusion_matrix( predictions, class_names):
     plt.show()
    
 # https://github.com/adityac94/Grad_CAM_plus_plus/blob/master/misc/utils.py"
-def guided_BP(sess, image, input_image, logits, keep_placeholder, label_id):
+def guided_BP(sess, image, input_image, logits, keep_placeholder, trainig_placeholder, label_id):
     g = tf.get_default_graph()
     with g.gradient_override_map({'Relu': 'GuidedRelu'}):
         
@@ -229,19 +230,19 @@ def guided_BP(sess, image, input_image, logits, keep_placeholder, label_id):
     output = np.array(output)
     prob = tf.nn.softmax(logits)
     if label_id == -1:
-        prob = sess.run(prob, feed_dict={input_image:image, label_index:label_id, keep_placeholder:1.0 })
+        prob = sess.run(prob, feed_dict={input_image:image, label_index:label_id, keep_placeholder:1.0, trainig_placeholder:False })
         index = np.argmax(prob)
-        print "Predicted_class: ", index
+        print("Predicted_class: ", index)
         output[index] = 1.0
 
     else:
         output[label_id] = 1.0
 
-    gb_grad_value = sess.run(gb_grad, feed_dict={input_image:image, label_index:label_id, keep_placeholder:1.0})
+    gb_grad_value = sess.run(gb_grad, feed_dict={input_image:image, label_index:label_id, keep_placeholder:1.0, trainig_placeholder:False })
 
     return gb_grad_value[0] 
 
-def grad_CAM_plus(sess, image, input_placeholder, logits, labels_placeholder, keep_placeholder, target_conv_layer, label_id, layer_name):
+def grad_CAM_plus(sess, image, input_placeholder, logits, labels_placeholder, keep_placeholder, trainig_placeholder, target_conv_layer, label_id, layer_name):
     g = tf.get_default_graph()
    
     #define your tensor placeholders for, labels and images
@@ -271,17 +272,17 @@ def grad_CAM_plus(sess, image, input_placeholder, logits, labels_placeholder, ke
     prob = tf.nn.softmax(logits)
     output = np.array(output)
     if label_id == -1:
-        prob_val = sess.run(prob, feed_dict={input_placeholder: image, label_index:label_id, keep_placeholder:1.0})
+        prob_val = sess.run(prob, feed_dict={input_placeholder: image, label_index:label_id, keep_placeholder:1.0, trainig_placeholder:False})
         index = np.argmax(prob_val)
         orig_score = prob_val[0][index]
-        print "Predicted_class: ", index
+        print("Predicted_class: ", index)
         output[index] = 1.0
         label_id = index
     else:
         output[label_id] = 1.0
     
  
-    conv_output, conv_first_grad, conv_second_grad, conv_third_grad = sess.run([target_conv_layer, first_derivative, second_derivative, triple_derivative], feed_dict={input_placeholder:image, label_index:label_id, keep_placeholder:1.0})
+    conv_output, conv_first_grad, conv_second_grad, conv_third_grad = sess.run([target_conv_layer, first_derivative, second_derivative, triple_derivative], feed_dict={input_placeholder:image, label_index:label_id, keep_placeholder:1.0, trainig_placeholder:False})
 
     global_sum = np.sum(conv_output[0].reshape((-1,conv_first_grad[0].shape[2])), axis=0)
 
@@ -323,7 +324,7 @@ def grad_CAM_plus(sess, image, input_placeholder, logits, labels_placeholder, ke
     cam = resize(cam,  image.shape[1:3])
 
     
-    gb = guided_BP(sess,image, input_placeholder, logits, keep_placeholder, label_id )  
+    gb = guided_BP(sess,image, input_placeholder, logits, keep_placeholder, trainig_placeholder, label_id )  
     return get_visual_images(image, cam, gb)
 
 def normalize(img, s=0.1):
@@ -334,8 +335,10 @@ def normalize(img, s=0.1):
             0, 1) * 255)
     
 def get_visual_images(img, cam, gb_viz):
-   
     img = np.squeeze(img)[:,:,:3]
+    if img.max() > 1.0:
+        img /=255.0
+       
     gb_viz = np.dstack((
             gb_viz[:, :, 2],
             gb_viz[:, :, 1],
@@ -381,7 +384,7 @@ def weights_visualization(sess, weights):
 
        
 
-def filters_visualization(sess, input_placeholder, keep_placeholder,  filter_name, feature = 1):
+def filters_visualization(sess, input_placeholder, keep_placeholder, trainig_placeholder, filter_name, feature = 1):
     def deprocess_image(x):
         # normalize tensor: center on 0., ensure std is 0.1
         x -= x.mean()
@@ -408,7 +411,7 @@ def filters_visualization(sess, input_placeholder, keep_placeholder,  filter_nam
     feature_image = np.random.uniform(size=image_shape)
     for i in range(50):
 #                 feed_dict = {self.dict_model["images"]: feature_image, self.dict_model["labels"]: label, model["keep"]:1.0}
-        feed_dict = {input_placeholder: feature_image, keep_placeholder: 1.0}
+        feed_dict = {input_placeholder: feature_image, keep_placeholder: 1.0,  trainig_placeholder:False}
         grad, loss_value = sess.run([gradient, loss],feed_dict=feed_dict)
         grad = np.array(grad).squeeze()
         step_size =  0.1 / (grad.std() + 1e-8)

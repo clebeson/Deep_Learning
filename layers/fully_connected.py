@@ -14,7 +14,6 @@ class FullyConnected(BaseLayer):
     
     def _build(self):
         input = self.input.output if isinstance(self.input, BaseLayer) else self.input
-
         rank = len(input.shape.as_list())
         if rank == 4: 
             kernel = input.shape.as_list()[1:-1]

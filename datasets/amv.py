@@ -3,7 +3,6 @@ import utils
 import numpy as np
 import os
 import pickle
-from  itertools import izip as zip
 
 
 class AMV(BaseDataset):

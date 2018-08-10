@@ -2,10 +2,12 @@ from abc import ABCMeta, abstractmethod
 import pickle
 import numpy as np
 from random import shuffle
+import random
 import os
 import tensorflow as tf
 import time
-from itertools import izip as zip
+import skimage as sk
+
 
 
 
@@ -49,7 +51,6 @@ class BaseDataset(object):
     def set_tfrecord(self, tfrercord):
         
         self._tfrecord = tfrercord
-        print("self._tfrecord=", self._tfrecord)
     
     def get_name(self):
         return self._name
@@ -59,6 +60,7 @@ class BaseDataset(object):
         return ( self.total_train, self.total_test, self.total_validation)
     
     def _set_data(self, data, labels, name="train"):
+        
         if name == "test":
             self._test_data, self._test_labels = data, labels
         elif name == "validation":
@@ -79,8 +81,18 @@ class BaseDataset(object):
                     self._teste_sample.append(self._test_data[index])
                     break
         return self._teste_sample
-            
-                          
+
+    def load_pickle(self, pickle_file):
+        try:
+            with open(pickle_file, 'rb') as f:
+                pickle_data = pickle.load(f)
+        except Exception as e:
+            with open(pickle_file, 'rb') as f:
+                pickle_data = pickle.load(f, encoding='latin1')
+        except Exception as e:
+            print('Unable to load data ', pickle_file, ':', e)
+            raise
+        return pickle_data
         
     def get_image_size(self):
         return self._image_size
@@ -88,19 +100,23 @@ class BaseDataset(object):
     def get_current_epoch(self):
         return self._current_epoch
         
-    def get_train(self, hot = True):
+    def get_train(self, hot = False):
         if len(self._train_data) == 0:
             print("Loading train data...")
             self.load("train")
+            if self.hparams.data_augmentation:
+                self._train_data, self._train_labels =  self.data_augmentation(self._train_data, self._train_labels)
+                self.total_train =  self._train_data.shape[0]
+       
         return self._train_data, self._dense_to_one_hot(self._train_labels) if hot else self._train_labels
     
-    def get_test(self, hot = True): 
+    def get_test(self, hot = False): 
         if len(self._test_data) == 0:
             print("Loading test data...")
             self.load("test")
         return self._test_data, self._dense_to_one_hot(self._test_labels) if hot else self._test_labels
     
-    def get_validation(self, hot = True): 
+    def get_validation(self, hot = False): 
         if len(self._validation_data) == 0:
             print("Loading validation data...")
             self.load("validation")
@@ -111,48 +127,79 @@ class BaseDataset(object):
         shuffled = False if type=="test" or type == "validation" else True
         return self._load_inputs(filename, shuffled )
         
-    def next_batch(self): 
-        if len(self._train_data) < 1 or len(self._train_labels) < 1:
+    def next_batch(self, hot = False): 
+        if self._train_data.shape[0] < 1 or self._train_labels.shape[0] < 1:
             print("Loading train data...")
             self.load("train")
+            if self.hparams.data_augmentation:
+                self._train_data, self._train_labels =  self.data_augmentation(self._train_data, self._train_labels)
+                self.total_train =  self._train_data.shape[0]
+       
         
         if self._indices == []:
-            self._indices = list(range(len(self._train_data)))
-        if  self._next_step == 0:
+            self._indices = list(range(self._train_data.shape[0]))
             shuffle(self._indices)
-            self._current_epoch += 1
         
         begin = self._next_step * self.hparams.batch_size 
         end = begin + self.hparams.batch_size 
         
-        if end > len(self._train_data):
-            end = len(self._train_data)
-            self._next_step = 0
+        if end > self._train_data.shape[0]:
+            shuffle(self._indices)
+            self._current_epoch += 1
+            begin = 0
+            end = self.hparams.batch_size 
+            self._next_step = 1
         else:
             self._next_step += 1
         
         next_batch_indices = self._indices[begin:end]
         data = self._train_data[next_batch_indices]
-        labels = self._train_labels[next_batch_indices]
+        labels = np.array(self._train_labels[next_batch_indices])
         
-        return data, self._dense_to_one_hot(labels)
+        return data, self._dense_to_one_hot(labels) if hot else labels
+    
+    def data_augmentation(self, images, labels):
+        
+        def random_rotation(image_array):
+          # pick a random degree of rotation between 25% on the left and 25% on the right
+            random_degree = random.uniform(-15, 15)
+            return sk.transform.rotate(image_array, random_degree)
+
+        def random_noise(image_array):
+          # add random noise to the image
+            return sk.util.random_noise(image_array)
+
+        def horizontal_flip(image_array):
+          # horizontal flip doesn't need skimage, it's easy as flipping the image array of pixels !
+            return image_array[:, ::-1]
+        
+        print("Augmenting data...")
+        aug_images = []
+        aug_labels = []
+
+        aug_images.extend( list(map(random_rotation, images)) )
+        aug_labels.extend(labels)
+        aug_images.extend( list(map(random_noise,    images)) )
+        aug_labels.extend(labels)
+        aug_images.extend( list(map(horizontal_flip, images)) )
+        aug_labels.extend(labels)
+        aug_labels.extend(labels)
+
+
+
+        return np.concatenate([np.array(aug_images), images]), np.array(aug_labels)
             
     def get_or_generate_bottleneck( self, sess, model, file_name, type = "train", batch_size = 128):
-        
-        if len(self._train_data) < 1 or len(self._train_labels) < 1:
-            self.load(type)
+
         if type == "test":
-            dataset = self._test_data
-            labels = self._test_labels
+            dataset, labels = self.get_test()
             
         elif type == "validation":
-            dataset = self._validation_data
-            labels = self._validation_labels
+            dataset, labels = self.get_validation()
         else:
-            dataset = self._train_data
-            labels = self._train_labels
+            dataset, labels = self.get_train()
         
-        labels = self._dense_to_one_hot(labels)
+#         labels = self._dense_to_one_hot(labels)
         path_file = os.path.join("../data",file_name+".pkl")
         
         if(os.path.exists(path_file)):
@@ -179,13 +226,16 @@ class BaseDataset(object):
 
                 data = dataset[indices_next_batch]
                 label = labels[indices_next_batch]
-
+                
                 input_size = np.prod(model["bottleneck_tensor"].shape.as_list()[1:])
-                tensor = sess.run(model["bottleneck_tensor"], feed_dict={
+                tensor = sess.run(model["bottleneck_tensor"], 
+                                  feed_dict={
                                   model["images"]:data, 
                                   model["bottleneck_input"]:np.zeros((batch_size,input_size)),  
-                                  model["labels"]:label,
-                                  model["keep"]:1.0} )
+#                                   model["labels"]:label,
+#                                   model["keep"]:1.0
+                                  } 
+                                 )
                 
                 for t in range(batch_size):
                     bottleneck_data.append(np.squeeze(tensor[t]))
@@ -351,7 +401,7 @@ class BaseDataset(object):
                 num_threads = 11, 
                 capacity = int(self.total_validation * 0.4))
 
-        label_batch = tf.one_hot(label_batch, self.hparams.num_classes)
+#         label_batch = tf.one_hot(label_batch, self.hparams.num_classes)
         return data_batch, label_batch
     
     

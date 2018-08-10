@@ -8,11 +8,10 @@ import numpy as np
 import os.path
 from base.basemodel import BaseModel
 from  base.hyperparameters import Hyperparameters
-from itertools import izip as zip
 from time import time
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-import base.functions as bf
+
 
 
 

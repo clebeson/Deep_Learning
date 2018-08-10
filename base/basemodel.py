@@ -10,8 +10,6 @@ import utils
 import math
 from time import time
 from random import shuffle
-from itertools import izip as zip
-import functions as  bf
 import layers
 from base.baselayer import BaseLayer
 from texttable import *
@@ -52,7 +50,7 @@ class BaseModel:
                       "layers":{}
                   }
         self.vars_to_restore = []
-        self._ckpt_dir = "./ckpts"
+        self._ckpt_dir = "./models/ckpts"
         self._layers = []
         self._istraining = False
  
@@ -111,7 +109,7 @@ class BaseModel:
   
     def _build_only_cnn(self, input_images, istraining, is_tf = True):
             self.close()
-            print "Buiding cnn from ""{}"" model.".format(self.info["model_name"])
+            print("Buiding cnn from ""{}"" model.".format(self.info["model_name"]) )
             self.dict_model["images"] = input_images
             self.dict_model["istraining"] = istraining     
             with tf.name_scope(self.info["model_name"]):
@@ -122,12 +120,14 @@ class BaseModel:
                 l._istraining_placeholder = istraining
                 
             self.built = True
+            self.vars_to_restore = np.reshape([ [l.weights.name, l.biases.name] for l in self._layers if l.weights is not None], (-1,1))
+
 
 
     def close(self):
-        for k in self.dict_model.keys():
+        for k in list(self.dict_model):
             if k == "layers":
-                 for l in self.dict_model[k].keys():
+                 for l in list(self.dict_model[k]):
                         del self.dict_model[k][l]   
             del self.dict_model[k]
         for var in self.vars_to_restore:
@@ -180,11 +180,11 @@ class BaseModel:
                         w = self.hparams.width - self.hparams.auto_crop[1]
                     input_data = tf.placeholder(tf.float32, shape=[None,h, w, self.hparams.channels], name='images')
                     
-                    labels = tf.placeholder(tf.float32, shape=[None, self.hparams.num_classes], name='labels')
+                    labels = tf.placeholder(tf.int32, shape=[None], name='labels')
                 self.dict_model["images"] = input_data 
                 self.dict_model["labels"] = labels
             self.dict_model["keep"] = tf.placeholder(tf.float32, name='dropout_keep')
-            self.dict_model["istraining"] = tf.placeholder(tf.float32, name='istraining')
+            self.dict_model["istraining"] = tf.placeholder(tf.bool, name='istraining')
              
 #             print("***********************************") 
 #             print(self.dict_model)
@@ -198,8 +198,8 @@ class BaseModel:
                     input_data, only_cnn = new_fc)
                        
             if  new_fc:
-#                 with tf.name_scope("flatten"):
-#                     self.add(layers.Flatten, name="flatten")
+                with tf.name_scope("flatten"):
+                    self.add(layers.Flatten, name="flatten")
 
                 self.add_fully_connected()
             
@@ -328,9 +328,9 @@ class BaseModel:
         table.set_cols_align(["c", "c", "c", "c", "c", "c", "c"])
         table.set_cols_valign(["m", "m", "m", "m", "m", "m", "m"])
         table.add_rows(rows)
-        print table.draw()
+        print(table.draw())
         percent_fc = fc/total
-        print "Total Parameters: {}   Percents: (CNN-{:.2f}%)  (FC-{:.2f}%)".format(size(total, system=si), (1.0-percent_fc)*100, percent_fc*100)
+        print("Total Parameters: {}   Percents: (CNN-{:.2f}%)  (FC-{:.2f}%)".format(size(total, system=si), (1.0-percent_fc)*100, percent_fc*100) )
     
     def generate_optimization_parameters(self):
         logits = self._layers[-1].output
@@ -340,17 +340,22 @@ class BaseModel:
             learning_rate = tf.train.exponential_decay(self.hparams.initial_learning_rate, global_step,
                                                        self.hparams.decay_steps, self.hparams.decay_rate, staircase=True)
         with tf.name_scope('train_accuracy'):
-            pred, lab = tf.argmax(logits, 1), tf.argmax(self.dict_model["labels"], 1)
-            _,acc = tf.metrics.accuracy(predictions = pred, labels = lab)
+            pred, lab = tf.argmax(logits, 1), self.dict_model["labels"]
+#             _,acc = tf.metrics.accuracy(predictions = pred, labels = lab)
+            acc = tf.equal(tf.argmax(logits, 1), tf.cast(lab,  tf.int64))
+            acc = tf.reduce_mean(tf.cast(acc, tf.float32))
             _,precision = tf.metrics.precision(predictions = pred, labels = lab)
             _,recall = tf.metrics.recall(predictions = pred, labels = lab)
             f1_score = (2 * (precision * recall)) / (precision + recall)
-#           acc = tf.equal(tf.argmax(logits, 1), tf.argmax(self.dict_model["labels"], 1))
-#             acc = tf.reduce_mean(tf.cast(acc, tf.float32))
-            tf.summary.scalar("accuracy",recall)
-        class_weights = tf.multiply(2.14, tf.cast(tf.equal(lab, 1), tf.float32)) + 1
+
+#             tf.summary.scalar("accuracy",recall)
+        class_weights = tf.multiply(0.0, tf.cast(tf.equal(lab, 1), tf.float32)) + 1
+       
         with tf.name_scope('loss'):
-                loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(logits=logits, onehot_labels=self.dict_model["labels"], weights = class_weights))
+#                 loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(logits=logits, onehot_labels=self.dict_model["labels"], weights = class_weights))
+                loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits,
+                                                                                 labels=tf.one_hot(self.dict_model["labels"],
+                                                                                                   self.hparams.num_classes)))
 
                 if self.hparams.regularizer_type:
                     loss = self.regularize(loss, self.hparams.regularizer_type, self.hparams.regularizer_scale)
@@ -367,6 +372,8 @@ class BaseModel:
         self.dict_model["optimizer"] = optimizer
         self.dict_model["metrics"] = {"accuracy":acc,"precision":precision,"":recall,"f1_score":f1_score}
         self.dict_model["global_step"] = global_step
+        self.dict_model["logits"] = logits
+        
     
     def regularize(self, loss, type = 1, scale = 0.005, scope = None):
         if type == 1:
@@ -404,8 +411,11 @@ class BaseModel:
         sess = tf.Session(config=config)
         all_vars = tf.global_variables()
         all_vars.extend(tf.local_variables())
-        saver = tf.train.Saver( var_list = all_vars, max_to_keep=1)
-        sess.run(tf.variables_initializer(all_vars))
+        saver = tf.train.Saver(max_to_keep=1)
+        init_g = tf.global_variables_initializer()
+        init_l = tf.local_variables_initializer()
+        sess.run(init_g)
+        sess.run(init_l)
 
         ckpt_path = self._generate_checkpoint_path()
         if not os.path.exists(ckpt_path):
@@ -471,14 +481,14 @@ class BaseModel:
                         _, batch_loss, batch_acc, step = self.sess.run(
                         [model["optimizer"], model["loss"], model["metrics"]["accuracy"], model["global_step"]], feed_dict=feed_dict)
                         sum_acc += batch_acc * self.hparams.batch_size
-
+                    
                     duration = time() - start_time
                     mean_acc = sum_acc / (steps_per_epoch * self.hparams.batch_size)
                     print(msg.format(step,  mean_acc*100, batch_loss, (steps_per_epoch / duration), 
                                      (steps_per_epoch*self.hparams.batch_size / duration) 
                                     ))
                     if epoch %5 == 0:
-                        print "The model was saved."
+                        print("The model was saved.")
                         self._saver.save(self.sess,ckpt_path, global_step=step)
                         
 
@@ -486,7 +496,7 @@ class BaseModel:
             except tf.errors.OutOfRangeError:
                 print('Done training... An error was ocurred during the training!!!')
             finally:
-                self._saver.save(self.sess,ckpt_path, global_step=step)        
+#                 self._saver.save(self.sess,ckpt_path, global_step=step)        
                 coord.request_stop()
             
             coord.join(threads)
@@ -494,8 +504,9 @@ class BaseModel:
  
         
         else:
-   
-            val_data, val_labels = self.dataset.get_validation()
+            
+            val_data, val_labels = self.dataset.get_test()
+           
             for epoch in range(self.hparams.num_epochs):
                 start_time = time()
 
@@ -506,32 +517,32 @@ class BaseModel:
                 for s in range(steps_per_epoch):
 
                     batch_data, batch_labels = self.dataset.next_batch()
-                    
+                   
                     feed_dict={input_data_placeholder: batch_data, model["labels"]: batch_labels, model["keep"]:self.hparams.keep, self.dict_model["istraining"]:True}
 
                     _, batch_loss, batch_acc, step = self.sess.run(
                     [model["optimizer"], model["loss"], model["metrics"]["accuracy"], model["global_step"]],
                     feed_dict=feed_dict)
                     sum_acc += batch_acc * self.hparams.batch_size
-
+                    
                 duration = time() - start_time
                 mean_acc = sum_acc / (steps_per_epoch * self.hparams.batch_size)
                 print(msg.format(step,  mean_acc*100, batch_loss, (steps_per_epoch / duration), 
                                  (steps_per_epoch*self.hparams.batch_size / duration) 
                                 ))
+                
+                if epoch % 10 == 0:
+                    acc = self._evaluate( val_data, val_labels )
 
-               
-                acc = self._evaluate( val_data, val_labels )
+                    print(acc, best_accuracy)
+                    if acc > best_accuracy:
+                        self._saver.save(self.sess, ckpt_path,  global_step=step)
+                        if best_accuracy  > 0:
+                            print("The model was saved. The current evaluation accuracy ({:.2f}%) is greater than the last one saved({:.2f}%).".format(acc*100,best_accuracy*100) )
+                        else:
+                            print("The model was saved.")
 
-
-                if acc > best_accuracy:
-                    self._saver.save(self.sess,ckpt_path, global_step=step)
-                    if best_accuracy  > 0:
-                        print "The model was saved. The current evaluation accuracy ({:.2f}%) is greater than the last one saved({:.2f}%).".format(acc*100,best_accuracy*100)
-                    else:
-                        print "The model was saved."
-                    
-                    best_accuracy= acc
+                        best_accuracy= acc
     
     def train(self):
         if self.hparams is None:
@@ -543,8 +554,9 @@ class BaseModel:
 #         train_data, train_labels = utils.data_augmentation(train_data, train_labels)
 
         model = self.dict_model
-
-
+        if not self.dataset.istfrecord():
+            _, _ = self.dataset. get_train()
+            
         steps_per_epoch = int(math.ceil(self.dataset.get_size()[0] /  self.hparams.batch_size))
         
        
@@ -587,8 +599,9 @@ class BaseModel:
             
 
         
-    def _evaluate(self, data, labels, batch_size = 32):
-        print(len(data))
+    def _evaluate(self, data, labels, batch_size = 96):
+        
+        if len(data) == 0: return
         if (not self.hparams.fine_tunning) and self.hparams.bottleneck:
             input_data_placeholder = self.dict_model["bottleneck_input"]
         else:
@@ -597,15 +610,16 @@ class BaseModel:
         if self.sess is None:
             self.sess = self.create_monitored_session(self.dict_model,steps_per_epoch)
 
-        size = len(data)//batch_size
-        indices = list(range(len(data)))
-        global_acc = 0;
-
+        num_data = data.shape[0]
+        size = num_data//batch_size
+        indices = list(range(num_data))
+        global_acc = 0.0
+    
         for i in range(size+1):
 
             begin = i*batch_size
             end = (i+1)*batch_size
-            end = len(data) if end >= len(data) else end
+            end = num_data if end >= num_data else end
              
             next_bach_indices = indices[begin:end]
             if len(next_bach_indices) == 0:
@@ -615,14 +629,14 @@ class BaseModel:
             batch_labels = labels[next_bach_indices]
             
 
-            acc= self.sess.run(self.dict_model["metrics"]["accuracy"],
+            acc = self.sess.run( self.dict_model["metrics"]["accuracy"],
                 feed_dict={input_data_placeholder: batch_data, self.dict_model["labels"]: batch_labels, self.dict_model["keep"]:1.0, self.dict_model["istraining"]:False})
-
-            global_acc += (acc * len(next_bach_indices))
             
-      
+           
+            global_acc += (acc * len(next_bach_indices))
+ 
         mes = "--> Evaluation accuracy: {:.2f}%"
-        global_acc /= len(data)
+        global_acc /= num_data
         print(mes.format(global_acc * 100))
        
         return global_acc
@@ -633,7 +647,6 @@ class BaseModel:
             self.dataset.set_tfrecord(False)
             self.build(istraining = False)
         logits = self._layers[-1].output
-
         data, labels = self.dataset.get_test(hot=False)
         print(data.shape, labels.shape)
             
@@ -648,15 +661,15 @@ class BaseModel:
                        "probs":[],
                        "labels":[]
                       }
-
-        size = len(data)//batch_size
-        indices = list(range(len(data)))
-        
+        num_data = data.shape[0]
+        size = num_data//batch_size
+        indices = list(range(num_data))
+        probs = tf.nn.softmax(logits)
         for i in range(size+1):
 
             begin = i*batch_size
             end = (i+1)*batch_size
-            end = len(data) if end >= len(data) else end
+            end = num_data if end >= num_data else end
 
             next_bach_indices = indices[begin:end]
             batch_xs = data[next_bach_indices]
@@ -665,22 +678,26 @@ class BaseModel:
                 prob = self._pred_with_crop(input_data_placeholder, batch_xs, 
                                             self.hparams.crop[0], self.hparams.crop[1])
             else:
-                prob = self.sess.run(tf.nn.softmax(logits),
+                prob = self.sess.run(probs,
                     feed_dict={input_data_placeholder: batch_xs, self.dict_model["keep"]:1.0,
                                self.dict_model["istraining"]:False})
 
             predictions["classes"].extend(np.argmax(prob,1))
             predictions["probs"].extend(prob)
+            
             predictions["labels"].extend(batch_ys)
+            
 
-
-        correct = list (map(lambda x,y: 1 if x==y else 0, predictions["labels"] , predictions["classes"]))
-        acc = np.mean(correct ) *100
+       
+        correct =  np.array(predictions["labels"]) == np.array(predictions["classes"])
+       
+        acc = np.mean(correct) *100.0
         p,r,f,s = sklm.precision_recall_fscore_support(predictions["labels"],  predictions["classes"]) 
-        mes = "--> Prediction accuracy: {:.2f}% ({}/{})"
-        print(mes.format( acc, sum(correct), len(data)))
-        mes = "--> (presision, recol, F1-score) ( {},{},{}"
-        print(mes.format(p,r,f))
+#         mes = "--> Accuracy: {:.2f}% ({}/{})"
+#         print(mes.format( acc, sum(correct), len(data)))
+        mes = "--> Accuracy: {:.2f}\n--> Precision: {}\n--> Recall:    {}\n--> F1-score:  {}\n\n"
+        print(mes.format(acc, ["{:.2f}".format(v*100) for v in p],["{:.2f}".format(v*100) for v in r],["{:.2f}".format(v*100) for v in f]))
+        
 
         return predictions
 

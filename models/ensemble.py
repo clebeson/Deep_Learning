@@ -8,11 +8,10 @@ import numpy as np
 import os.path
 from base.basemodel import BaseModel
 from  base.hyperparameters import Hyperparameters
-from itertools import izip as zip
 from time import time
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-import base.functions as bf
+
 from enum import Enum
 import layers
 
@@ -57,10 +56,13 @@ class Ensemble(BaseModel):
                     raise Eception("There is any model added.")
                 cnn_layers = []
                 if self._multiple_inputs:
-                    channels = self.hparams.channels // len(self._models)
                     
+                    channels = self.hparams.channels // len(self._models)
+                    print("************************",channels)
                 for i, model in enumerate(self._models):  
-                    input_images = inputs if not self._multiple_inputs else  inputs[:,:,:,i*channels: (i+1)*channels]
+                    input_images = inputs if not self._multiple_inputs else  inputs[...,i*channels: (i+1)*channels]
+                    
+                    
                     hparams = Hyperparameters()
                     hparams.cut_layer = "" if model.cut_layer is None else model.cut_layer
                     hparams.fine_tunning = True
@@ -178,7 +180,7 @@ class Ensemble(BaseModel):
             
         if len(os.listdir(ckpt_path))  > 0: 
             try:
-                print "Restoring the entire model."
+                print("Restoring the entire model.")
                 saver.restore(sess, tf.train.latest_checkpoint(ckpt_path))
             except Exception as e:
                 
@@ -194,25 +196,28 @@ class Ensemble(BaseModel):
             to_restore = []
 
             self._models.sort(key=lambda model: len(model._layers),reverse=True)
+            
             for model in self._models:
+                
                 to_restore =  [var for var in all_vars if var.name in model.vars_to_restore ]
                 res = tf.train.Saver(to_restore)
 
                 try:
 
                     model_path = os.path.join(self._ckpt_dir , model.info["file_name"])
-                    for var in model_path:
-                        print(var.name)
-                    print("************************")
-
+                    
                     print("Restoring variables from: {}".format(model_path))
                     res.restore(sess, model_path)
 
-                except:
+                except Exception as e:
+#                     print(os.path.abspath(model_path))
+#                     print("exception", e.message)
                     to_restore_names = ["/".join(var.name.split("/")[1:]) for var in to_restore]
-                    for var in to_restore:
-                        print(var.name)
-                    print("************************")
+#                     for var in to_restore:
+#                         print(var.name)
+#                     print("************************")
+#                     for name in to_restore_names:
+#                         print(name)
 
                     alread_restored = [var 
                                      for var in restored 
@@ -224,6 +229,7 @@ class Ensemble(BaseModel):
                     alread_restored.sort(key=lambda var:var.name)
                     
                     if len(to_restore) != len(alread_restored):
+                        print(len(to_restore), len(alread_restored))
                         print("Some variables could not be restored - (Amount={})".format(len(to_restore) - len(alread_restored)))
                        
 

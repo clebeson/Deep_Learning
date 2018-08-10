@@ -10,7 +10,7 @@ import utils
 import math
 from time import time
 from random import shuffle
-from itertools import izip as zip
+
 
 
 
@@ -24,19 +24,18 @@ class BaseLayer():
         self.weights = None
         self.biases = None
         self.kernel = None
-        self.stride = None
         self.name = name
         self.type = type
         self._my_input_data_placeholder = None
         self._model_input_data_placeholder = None
         self._labels_placeholder = False
         self._keep_placeholder= None
-        
+        self._istraining_placeholder = istraining
         self._logits = None
         self._sess = None
         self._model_name = None
-        self.istraining = istraining
         self._build()
+        self.stride = None
         self.shape = self.output.shape
         
 
@@ -209,32 +208,34 @@ class BaseLayer():
         return temp_layer
 
 
-    def conv2d(self, x, out_channels, kernel,  name = "conv",  batch_norm = False, padding = "SAME"):
+    def conv2d(self, x, out_channels, kernel, stride = [1, 1, 1, 1],   name = "conv",  batch_norm = False, padding = "SAME"):
         depth = x.shape.as_list()[-1]
         w, b = self.get_weights(depth, out_channels, kernel)
-        self.stride = [1,1]
-        conv = tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], data_format= "NHWC", 
+        self.stride = stride
+        
+        conv = tf.nn.conv2d(x, w, strides=stride, data_format= "NHWC", 
                          padding = padding, name = self.name)
         if batch_norm == "layer_norm":
             conv = tf.nn.bias_add(conv, b)
             conv = tf.contrib.layers.layer_norm(conv, scope = "{}/layer_norm".format(name))
         elif batch_norm == "cos_norm":
             conv = self.conv2d_cosnorm(conv, x, w, b, name = "{}/cos_norm".format(name))
-        elif batch_norm is not None:
+        elif batch_norm:
             conv = tf.nn.bias_add(conv, b)
             conv = self.batch_norm(conv, "{}/batch_norm".format(name) )
       
         conv = tf.nn.relu(conv)
         
         self.output = conv
+        
         return conv
     
-    def conv2d_fc(self, x, out_channels, kernel,  name = "conv",  activation = None, keep = None, batch_norm = None, padding = "VALID"):
+    def conv2d_fc(self, x, out_channels, kernel,  stride = [1, 1, 1, 1], name = "conv",  activation = None, keep = None, batch_norm = None, padding = "VALID"):
         depth = x.shape.as_list()[-1]
         w, b = self.get_weights(depth, out_channels, kernel)
-        self.stride = [1,1]
+        self.stride = stride
        
-        fc = tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], data_format= "NHWC", 
+        fc = tf.nn.conv2d(x, w, strides=stride, data_format= "NHWC", 
                          padding = padding, name = self.name)
         
         if batch_norm == "layer_norm":
@@ -263,6 +264,7 @@ class BaseLayer():
 
 
     def batch_norm(self, tensor, name = None):
+        print(self._istraining_placeholder)
         return  tf.layers.batch_normalization(tensor, 
                                                fused=True, 
 #                                                name = name,
@@ -317,11 +319,12 @@ class BaseLayer():
         images = []
         
         for feature in features:
-            image= utils.filters_visualization(self._sess, self._model_input_data_placeholder, self._istraining_placeholder, name, feature)
+            image= utils.filters_visualization(self._sess, self._model_input_data_placeholder,  self._keep_placeholder, self._istraining_placeholder, name, feature)
+                                            
             images.append(image)
         return images
     
-    def activation_maps(self, images=[], labels=[]):
+    def attention_maps(self, images=[], labels=[]):
         
 #         images = self.dataset.get_sample() if not images or len(images) == 0 else images
         if not type(images) == list:
@@ -336,7 +339,10 @@ class BaseLayer():
         for i, image in enumerate(images):
             image = np.expand_dims(image, axis=0) if len(list(image.shape)) == 3 else image
             results = utils.grad_CAM_plus(self._sess, image, self._model_input_data_placeholder, 
-                                           self._logits.output, self._labels_placeholder, self._keep_placeholder, self.output, labels[i], self.name)
+                                           self._logits.output, self._labels_placeholder, self._keep_placeholder, 
+                                          self._istraining_placeholder, self.output, labels[i], self.name)
+
+            
             image_results.append(results)
         return image_results
             

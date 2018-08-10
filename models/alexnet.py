@@ -8,11 +8,10 @@ import numpy as np
 import os.path
 from base.basemodel import BaseModel
 from  base.hyperparameters import Hyperparameters
-from itertools import izip as zip
 from time import time
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-import base.functions as bf
+
 
 
 class Alexnet(BaseModel):
@@ -28,16 +27,16 @@ class Alexnet(BaseModel):
                   )
 
 
-    def _get_cnn(self, inputs, batch_norm = False):
-        net = bf.conv2d(inputs, 64, [11, 11], 4, padding='VALID', name='conv1')
-        net = bf.maxpool(net, [3, 3], [2,2], name='pool1')
-        net = bf.conv2d(net, 192, [5, 5], name='conv2')
-        net = bf.maxpool(net, [3, 3], 2, name='pool2')
-        net = bf.conv2d(net, 384, [3, 3], name='conv3')
-        net = bf.conv2d(net, 384, [3, 3], name='conv4')
-        net = bf.conv2d(net, 256, [3, 3], name='conv5')
-        net = bf.maxpool(net, [3, 3], 2, name='pool5')
-        return net
+    def _get_cnn(self, inputs, batch_norm = False): pass
+#         net = bf.conv2d(inputs, 64, [11, 11], 4, padding='VALID', name='conv1')
+#         net = bf.maxpool(net, [3, 3], [2,2], name='pool1')
+#         net = bf.conv2d(net, 192, [5, 5], name='conv2')
+#         net = bf.maxpool(net, [3, 3], 2, name='pool2')
+#         net = bf.conv2d(net, 384, [3, 3], name='conv3')
+#         net = bf.conv2d(net, 384, [3, 3], name='conv4')
+#         net = bf.conv2d(net, 256, [3, 3], name='conv5')
+#         net = bf.maxpool(net, [3, 3], 2, name='pool5')
+#         return net
 
 
         
