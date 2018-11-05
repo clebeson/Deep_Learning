@@ -33,7 +33,7 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix
 from google.colab import files
 from itertools import product
-!pip install googledrivedownloader
+# !pip install googledrivedownloader
 logging.getLogger("tensorflow").setLevel(logging.ERROR)
 
 """---

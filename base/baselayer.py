@@ -13,36 +13,35 @@ from random import shuffle
 
 
 
-
 class BaseLayer():
     
     __metaclass__ = ABCMeta
     
-    def __init__(self, input, name = "conv/conv", type = "conv", istraining = None):
+    def __init__(self, input, name = "conv/conv", type = "conv"):
         self.input = input
         self.output = None
         self.weights = None
         self.biases = None
         self.kernel = None
         self.name = name
+        self.model_name = None
         self.type = type
+        self.ckpt_weigths = None
         self._my_input_data_placeholder = None
         self._model_input_data_placeholder = None
         self._labels_placeholder = False
         self._keep_placeholder= None
-        self._istraining_placeholder = istraining
+        self._istraining_placeholder = None
         self._logits = None
         self._sess = None
         self._model_name = None
-        self._build()
+        self.built = False
         self.stride = None
-        self.shape = self.output.shape
+
         
 
-
-    
     @abstractmethod
-    def _build(self): pass
+    def build(self): raise NotImplementedError
     
     def stop_gradient(self):
         self.output = tf.stop_gradient(self.output)
@@ -61,8 +60,19 @@ class BaseLayer():
         del self._istraining_placeholder
         del self._logits 
 
-        
+    
         del self.value
+        
+        
+    
+    def __add__(self, x):
+        print(x)
+        if isinstance(x, BaseLayer):
+            return x.output + self.output
+        else:
+            return x + self.output
+    
+    
     def get_model_nome(self):
         return self._model_name
     
@@ -74,13 +84,18 @@ class BaseLayer():
             ) +\
             np.prod(self.biases.shape.as_list()[1:])
             
-        input_value = self.input.shape.as_list()[1:] if not type(self.input)==list else tuple([input.shape.as_list()[1:] for input in self.input])
+        input_value = self.input.shape.as_list()[1:] if not type(self.input)==list \
+                                                     else tuple([input.shape.as_list()[1:] \
+                                                                 for input in self.input])
             
-        return [ self._model_name, self.name, self.type, input_value, self.output.shape.as_list()[1:], self.kernel if  self.kernel else "-", self.stride if  self.stride else "-", params ]
+        return [ self._model_name, self.name, self.type, input_value, 
+                self.output.shape.as_list()[1:], self.kernel 
+                if  self.kernel else "-", self.stride if  self.stride else "-", params ]
    
     
     def shape(self):
         return self.output.shape
+    
     def conv3d(self, tensor, temp_kernel, space_kernel, num_filters, stride=[1,1,1,1,1], name = "conv3d"):   
         channels = int(tensor.shape[4])
         filter, _ = self.get_3d_filters(temp_kernel, channels, num_filters, 
@@ -111,11 +126,25 @@ class BaseLayer():
         return filter, biases
 
     def get_weights(self, w_inputs, w_output, kernel_size = []):
-        xavier_init = tf.contrib.layers.xavier_initializer()
-        weights= tf.Variable(xavier_init(kernel_size + [w_inputs, w_output]),
-                             name="{}/weights".format(self.name))
-        biases =  tf.Variable(xavier_init([w_output]), 
-                              name="{}/biases".format(self.name))
+        w_init = None
+        b_init = None
+        if self.ckpt_weigths is not None:
+            try:
+                w_init = self.ckpt_weigths[self.name+"_W"]
+                b_init = self.ckpt_weigths[self.name+"_b"]
+            except Exception as e: 
+                print(e)
+                
+        if w_init is None or b_init is None: 
+            print("xavier initialized: ", self.name)
+            xavier_init = tf.contrib.layers.xavier_initializer()
+            w_init = xavier_init(kernel_size + [w_inputs, w_output])
+            b_init = xavier_init([w_output])
+       
+        weights= tf.Variable(w_init,name="{}/weights".format(self.name))
+        biases =  tf.Variable(b_init,name="{}/biases".format(self.name))
+#         print(weights, biases)
+
         self.weights = weights
         self.biases = biases
         self.kernel = kernel_size

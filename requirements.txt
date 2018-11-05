@@ -1,0 +1,15 @@
+matplotlib==2.2.2
+scipy==1.1.0
+numpy==1.14.5
+protobuf==3.6.0
+hurry==1.0
+hurry.filesize==0.9
+moviepy==0.2.3.5
+pims==0.4.1
+scikit-image==0.14.0
+scikit_learn==0.19.2
+scikit_learn==0.19.2
+texttable==1.4.0
+opencv-python==3.4.2.17
+
+

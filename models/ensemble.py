@@ -53,12 +53,11 @@ class Ensemble(BaseModel):
                 
     def _create_cnn(self, inputs, batch_norm = False, pretrained_weights = None): 
                 if not self._models:
-                    raise Eception("There is any model added.")
+                    raise Exception("There is any model added.")
                 cnn_layers = []
                 if self._multiple_inputs:
                     
                     channels = self.hparams.channels // len(self._models)
-                    print("************************",channels)
                 for i, model in enumerate(self._models):  
                     input_images = inputs if not self._multiple_inputs else  inputs[...,i*channels: (i+1)*channels]
                     
@@ -92,7 +91,7 @@ class Ensemble(BaseModel):
         self.add(layers.Logits, num_classes = 1000, name = "logits")
         
     
-    def build(self, is_tf = True, new_fc = True, istraining = False):
+    def build(self, input_images = None, labels = None, is_tf = True, new_fc = True, istraining = False):
             self.close()
             tf.reset_default_graph()
 
@@ -114,7 +113,7 @@ class Ensemble(BaseModel):
                         h = self.hparams.height - self.hparams.auto_crop[0]
                         w = self.hparams.width - self.hparams.auto_crop[1]
                     input_data = tf.placeholder(tf.float32, shape=[None,h, w, self.hparams.channels], name='images')
-                    labels = tf.placeholder(tf.float32, shape=[None, self.hparams.num_classes], name='labels')
+                    labels = tf.placeholder(tf.int32, shape=[None], name='labels')
             
                 self.dict_model["images"] = input_data 
                 self.dict_model["labels"] = labels
@@ -123,30 +122,58 @@ class Ensemble(BaseModel):
              
             self._transfer_learning(input_data, only_cnn = new_fc) if  is_tf else self._from_scratch(
                 input_data, only_cnn = new_fc)
-                
+            outs = []
+            for i, model in enumerate(self._models):
+                    input_images = self.dict_model["images"] if not self._multiple_inputs else self.dict_model["images"][:,:,:,i*3:(i+1)*3]
+                    model._build_only_cnn(input_images, istraining, is_tf = is_tf)
+                    dict_weights = np.load(os.path.join(model._ckpt_dir, model.info["weights"]))
+                    for l in model._layers:
+                        l.ckpt_weigths = dict_weights
+                        l.build()
+                        l.model_name = self.info["model_name"]
+                        l._model_input_data_placeholder = self.dict_model["images"]       
+                        l._labels_placeholder = self.dict_model["labels"]
+                        l._keep_placeholder= self.dict_model["keep"]
+                        l._istraining_placeholder = self.dict_model["istraining"]
+                    
+                    outs.append(model.get_output().output)
             
+  
+            ensamble = tf.stack(outs,-1)
+            self.add(layers.EnsambleMean, ensamble)
+            self.add(layers.Flatten) 
             if  new_fc:
                 self.add_fully_connected()
             
-            if istraining:
-                self.generate_optimization_parameters()
+#             if istraining:
+#                 self.generate_optimization_parameters()
                 
         
-            if self.sess is None:
-                self.sess, self._saver = self.create_monitored_session(self.dict_model)
-       
+#             if self.sess is None:
+#                 self.sess, self._saver = self.create_monitored_session(self.dict_model)
+            
+            for model in self._models:
+                for  l in model._layers:
+                    l._sess = self.sess
+                    l._logits = self._layers[-1]
+                    
+#             dict_weights = np.load(os.path.join(self._ckpt_dir, self.info["weights"]))
+#             for l in self._layers: print("***** ",l)
+            
             for l in self._layers:
-                l._model_input_data_placeholder = self.dict_model["images"]       
-                l._labels_placeholder = self.dict_model["labels"]
-                l._keep_placeholder= self.dict_model["keep"]
-                l._istraining_placeholder = self.dict_model["istraining"]
+                if l.ckpt_weigths is None:
+#                     print("***** ",l)
+                    l.ckpt_weigths = dict_weights
+                    l.build()
+                    l.model_name = self.info["model_name"]
+                    l._model_input_data_placeholder = self.dict_model["images"]       
+                    l._labels_placeholder = self.dict_model["labels"]
+                    l._keep_placeholder= self.dict_model["keep"]
+                    l._istraining_placeholder = self.dict_model["istraining"]
                 l._sess = self.sess
                 l._logits = self._layers[-1]
-                if l._model_name is None:
-                    l._model_name = "ensemble"
-                    
-            
-            
+       
+
             self.built = True
     
     
@@ -162,92 +189,7 @@ class Ensemble(BaseModel):
             self._create_fully_connected(self.hparams.normalization)
               
 
-    
-    def create_monitored_session(self, model,iter_per_epoch = 1):
-        config = tf.ConfigProto()
-        config.gpu_options.allow_growth = True
- 
-        sess = tf.Session(config=config)
-        all_vars = tf.global_variables()
-        all_vars.extend(tf.local_variables())
-        saver = tf.train.Saver( var_list = all_vars, max_to_keep=1)
-#         sess.run(tf.variables_initializer(all_vars))
-        
-       
-        ckpt_path = self._generate_checkpoint_path()
-        if not os.path.exists(ckpt_path):
-            os.makedirs(ckpt_path)
-            
-        if len(os.listdir(ckpt_path))  > 0: 
-            try:
-                print("Restoring the entire model.")
-                saver.restore(sess, tf.train.latest_checkpoint(ckpt_path))
-            except Exception as e:
-                
-                print("It was not possible to restore the model. All variables will be initialized with their default values.")
-                sess.run(tf.variables_initializer(all_vars))
-                print(e)
-            
-             
-           
-        else:
-            
-            restored = []
-            to_restore = []
-
-            self._models.sort(key=lambda model: len(model._layers),reverse=True)
-            
-            for model in self._models:
-                
-                to_restore =  [var for var in all_vars if var.name in model.vars_to_restore ]
-                res = tf.train.Saver(to_restore)
-
-                try:
-
-                    model_path = os.path.join(self._ckpt_dir , model.info["file_name"])
-                    
-                    print("Restoring variables from: {}".format(model_path))
-                    res.restore(sess, model_path)
-
-                except Exception as e:
-#                     print(os.path.abspath(model_path))
-#                     print("exception", e.message)
-                    to_restore_names = ["/".join(var.name.split("/")[1:]) for var in to_restore]
-#                     for var in to_restore:
-#                         print(var.name)
-#                     print("************************")
-#                     for name in to_restore_names:
-#                         print(name)
-
-                    alread_restored = [var 
-                                     for var in restored 
-                                     if var.name.split("/")[0]  == model.info["model_name"]
-                                     and "/".join(var.name.split("/")[1:]) in  to_restore_names
-                                    ]
-                   
-                    to_restore.sort(key=lambda var:var.name)
-                    alread_restored.sort(key=lambda var:var.name)
-                    
-                    if len(to_restore) != len(alread_restored):
-                        print(len(to_restore), len(alread_restored))
-                        print("Some variables could not be restored - (Amount={})".format(len(to_restore) - len(alread_restored)))
-                       
-
-                    for to, alread in zip(to_restore,alread_restored):
-                        sess.run(to.assign(alread))
-
-                restored += to_restore
-                       
-            restored_names = [var.name for var in restored]        
-            unrestored = [var for var in all_vars if var.name not in restored_names]                    
-            print("Initializing only unrestored variables")
-            sess.run(tf.variables_initializer(unrestored))
-            
-
-                  
-        
-        return sess, saver
-    
+   
         
         
     

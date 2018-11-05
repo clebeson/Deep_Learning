@@ -3,7 +3,6 @@ import utils
 import numpy as np
 import os
 import pickle
-from  itertools import izip as zip
 
 
 class Star(BaseDataset):
@@ -37,7 +36,7 @@ class Star(BaseDataset):
 
         with open(os.path.join(main_directory,
 folder_name,"star_{}_rgb_{}.pkl".format(self.num_images,name)), 'rb') as f:
-            datadict = pickle.load(f)
+            datadict = self.load_pickle(f)
         
         self._set_data(np.array([d[10:-10, 30:-30,:]/255.0 for d in datadict["data"]]), np.array(datadict['labels']), name = name)
         del datadict

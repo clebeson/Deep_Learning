@@ -10,10 +10,10 @@ class Conv3d(BaseLayer):
         self._stride = stride
         self._padding = padding
         self._kernel = kernel
-        BaseLayer.__init__(self, input = input, name=name, type = "conv3d", istraining = istraining)
+        BaseLayer.__init__(self, input = input, name=name, type = "conv3d")
         
     
-    def _build(self):
+    def build(self):
         input = self.input.output if isinstance(self.input, BaseLayer) else self.input
         self.output = self.conv3d(tensor = input, temp_kernel_size = self._temp_filter_size, 
                     spatial_kernel = self._kernel, num_filters = self._num_filters, 

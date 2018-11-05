@@ -1,8 +1,8 @@
 import pickle
 import numpy as np
 import os
-# from urllib.request import urlretrieve
-import urllib2
+from urllib.request import urlretrieve
+# import urllib2
 import tarfile
 import zipfile
 import sys
@@ -24,7 +24,7 @@ from scipy.misc import imread, imresize
 from tensorflow.python.framework import graph_util
 from scipy.ndimage.filters import gaussian_filter
 
-def plot_images(images, subplot = (1,2), show_size=100):
+def plot_images(images, subplot = (1,2), titles = None, show_size=100):
     if not images or len(images) == 0:
         return
     """
@@ -43,7 +43,7 @@ def plot_images(images, subplot = (1,2), show_size=100):
     fig, axes = plt.subplots(*subplot)
 
     # Adjust vertical spacing.
-    fig.subplots_adjust(hspace=0.1, wspace=0.1)
+    fig.subplots_adjust(hspace=0.1, wspace=0.3)
 
     # Use interpolation to smooth pixels?
     smooth = True
@@ -60,7 +60,8 @@ def plot_images(images, subplot = (1,2), show_size=100):
         if i >= size: break
         # Get the i'th image and only use the desired pixels.
         img = images[i]
-        img = resize(img, (show_size, show_size), anti_aliasing=True)
+#         img = resize(img, (show_size, show_size), anti_aliasing=True)
+        title = "" if titles is None or len(titles) < i else titles[i]
 
 
         # Normalize the image so its pixels are between 0.0 and 1.0
@@ -68,6 +69,7 @@ def plot_images(images, subplot = (1,2), show_size=100):
 
         # Plot the image.
         ax.imshow(img_norm, interpolation=interpolation)
+        ax.set_title(title)
 
         # Remove ticks.
         ax.set_xticks([])
@@ -93,11 +95,11 @@ def maybe_download_and_extract(url, main_directory,filename, original_name):
         print("Downloading ",url_file_name)
 
         try:
-            f = urllib2.urlopen(url)
-            data = f.read()
-            with open(zip_file, "wb") as code:
-                code.write(data)
-#             file_path, _ = urlretrieve(url=url, filename= zip_file, reporthook=_print_download_progress)
+#             f = urllib2.urlopen(url)
+#             data = f.read()
+#             with open(zip_file, "wb") as code:
+#                 code.write(data)
+            file_path, _ = urlretrieve(url=url, filename= zip_file, reporthook=_print_download_progress)
         except:
                 print("This could be for a problem with the storage site. Try again later")
                 return
@@ -164,7 +166,7 @@ def generate_confusion_matrix( predictions, class_names):
         else:
             print('Confusion matrix, without normalization')
 
-        print(cm.shape)
+#         print(cm.shape)
 
         plt.imshow(cm, interpolation='nearest', cmap=cmap)
         plt.title(title)
@@ -172,7 +174,7 @@ def generate_confusion_matrix( predictions, class_names):
 
         tick_marks = np.arange(len(classes))
 
-
+  
         plt.xticks(tick_marks, classes, rotation=45)
         plt.yticks(tick_marks, classes)
 
@@ -183,7 +185,7 @@ def generate_confusion_matrix( predictions, class_names):
             plt.text(j, i, format(cm[i, j], fmt)+symbol,
                     horizontalalignment="center",
                     color="white" if cm[i, j] > thresh else "black")
-
+ 
         plt.tight_layout()
         plt.ylabel('Real')
         plt.xlabel('Predicted')
@@ -194,11 +196,11 @@ def generate_confusion_matrix( predictions, class_names):
 
 
     # # Plot normalized confusion matrix
-    if len(class_names) > 5:
-        figsize=(len(class_names),len(class_names)-3)
-        figsize=(10,8)
+    if len(class_names) > 15:
+        figsize=(len(class_names)-5,len(class_names)-8)
+        
     else:
-        figsize=(5,5)
+        figsize=(10,10)
     plt.figure(figsize=figsize)
     plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True,
                         title='Normalized confusion matrix')
@@ -368,7 +370,7 @@ def get_visual_images(img, cam, gb_viz):
     cam_modified = (cam*-1.0) + 1.0
     cam_heatmap = np.array(cv2.applyColorMap(np.uint8(255*cam_modified), cv2.COLORMAP_JET))
     cam_heatmap = cam_heatmap/255.0
-    fin = (img*0.7) + (cam_heatmap*0.3)
+    fin = (img*0.4) + (cam_heatmap*0.6)
     
     fin = (fin*255).astype('uint8')
     img = (img*255).astype('uint8')
@@ -376,10 +378,17 @@ def get_visual_images(img, cam, gb_viz):
 
 def weights_visualization(sess, weights):
     w = sess.run(weights)
+    shape = w.shape
     images = []
-    for i in range(w.shape[-1]):
-        kernel  = normalize(w[:,:,:,i].squeeze())
-        images.append(imresize(kernel, (10,10)))
+    if shape[2] == 3:
+        for i in range(shape[-1]):
+            kernel  = normalize(w[:,:,:,i].squeeze())
+            images.append(imresize(kernel, (10,10)))
+    else:
+         
+            images = [np.reshape(w, (shape[0]*shape[2], shape[3]*shape[1]))]
+           
+            
     return images
 
        
@@ -414,7 +423,7 @@ def filters_visualization(sess, input_placeholder, keep_placeholder, trainig_pla
         feed_dict = {input_placeholder: feature_image, keep_placeholder: 1.0,  trainig_placeholder:False}
         grad, loss_value = sess.run([gradient, loss],feed_dict=feed_dict)
         grad = np.array(grad).squeeze()
-        step_size =  0.1 / (grad.std() + 1e-8)
+        step_size =  1.0 / (grad.std() + 1e-8)
         feature_image += step_size * grad
         feature_image = gaussian_filter(feature_image, sigma = 0.2)
         

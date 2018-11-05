@@ -9,10 +9,10 @@ class FullyConnected(BaseLayer):
         self._norm = norm
         self._istraining_placeholder = istraining
         self._activation = activation
-        BaseLayer.__init__(self, input = input, name=name, type = "fc_conv", istraining = istraining)
+        BaseLayer.__init__(self, input = input, name=name, type = "fc_conv")
         
     
-    def _build(self):
+    def build(self):
         input = self.input.output if isinstance(self.input, BaseLayer) else self.input
         rank = len(input.shape.as_list())
         if rank == 4: 

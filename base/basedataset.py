@@ -322,9 +322,8 @@ class BaseDataset(object):
 
                     if label == None:
                         continue
-
                     example = tf.train.Example(features=tf.train.Features(feature={       
-                        'data': byte_feature(data.tostring()), 
+                        'data': byte_feature([data.tostring()]), 
                         'label':int_feature([label])
                     }))
                     writer.write(example.SerializeToString())
@@ -344,6 +343,7 @@ class BaseDataset(object):
     
     def _tf_data_aug(self, data):
         print("Data augmentation enabled!")
+
         data = tf.random_crop(data, [self.hparams.height-self.hparams.auto_crop[0], 
                                       self.hparams.width-self.hparams.auto_crop[1],
                                       self.hparams.channels])
@@ -355,15 +355,11 @@ class BaseDataset(object):
         reader = tf.TFRecordReader()
         _, serialized = reader.read(queue)
         features = tf.parse_single_example(serialized, features={
-        'data': tf.FixedLenFeature([self.hparams.height *
-                                         self.hparams.width *
-                                         self.hparams.channels ], 
-                                        tf.string),
-            
+        'video_raw': tf.FixedLenFeature([], tf.string),
         'label': tf.FixedLenFeature([], tf.int64),
         })
         
-        data = tf.decode_raw(features['data'], tf.uint8)
+        data = tf.decode_raw(features['video_raw'], tf.uint8)
         label = tf.cast(features['label'], tf.int32)
         
         data = tf.cast(data, tf.float32)
@@ -374,7 +370,7 @@ class BaseDataset(object):
 
 
         else:
-            
+
             data = tf.squeeze(tf.image.resize_bicubic(tf.expand_dims(data,0), 
                                                       [self.hparams.height-self.hparams.auto_crop[0],
                                                        self.hparams.width-self.hparams.auto_crop[1]]
@@ -402,6 +398,7 @@ class BaseDataset(object):
                 capacity = int(self.total_validation * 0.4))
 
 #         label_batch = tf.one_hot(label_batch, self.hparams.num_classes)
+
         return data_batch, label_batch
     
     

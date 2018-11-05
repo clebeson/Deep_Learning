@@ -8,3 +8,4 @@ from layers.logits import *
 from layers.flatten import *
 from layers.maxpool import *
 from layers.decaf import *
+from layers.ensamble_mean import *

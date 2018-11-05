@@ -8,14 +8,14 @@ import pickle
 class Star_cos(BaseDataset):
     
     def __init__(self, hparams, tfrecord = False):
-            hparams.num_classes = 20
-            hparams.height = 100
-            hparams.width = 100
+            hparams.num_classes = 21
+            hparams.height = 120
+            hparams.width = 160
             hparams.channels = 3
             hparams.class_names = ['prendere', 'vieniqui', 'perfetto', 'fame', 'sonostufo', 
                                    'seipazzo', 'basta', 'cheduepalle', 'noncenepiu', 'chevuoi', 
                                    'ok', 'combinato', 'freganiente', 'cosatifarei', 'buonissimo', 
-                                   'vattene', 'messidaccordo', 'daccordo', 'furbo', 'tantotempo'
+                                   'vattene', 'messidaccordo', 'daccordo', 'furbo', 'tantotempo',"Neutro"
                                   ]
             
             BaseDataset.__init__(self, hparams = hparams, name = "Star_cos", total_train = 6847, total_test =3579 , total_validation = 2700, 
@@ -25,7 +25,7 @@ class Star_cos(BaseDataset):
 
     def load(self, name = "train"):
         
-        folder_name = 'star_cos'
+        folder_name = 'star_merged_cos'
         main_directory = "./data"
 #         url = "http://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
 
@@ -36,7 +36,8 @@ class Star_cos(BaseDataset):
 
         file_name = os.path.join(main_directory,folder_name,"star_cos_{}.pkl".format(name))
         datadict = self.load_pickle(file_name)
-        self._set_data(np.array([d[10:-10, 30:-30,:]/255.0 for d in datadict["data"]]), np.array(datadict['labels']), name = name)
+        self._set_data(np.array([d/255.0 for d in datadict["data"]]), np.array(datadict['labels']), name = name)
+#         [10:-10, 30:-30,:]
         del datadict
 
 #   
